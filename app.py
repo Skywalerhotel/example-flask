@@ -1,11 +1,36 @@
+from flask import Flask, request, Response, render_template_string
 import requests
 
-original_url = "https://nw19.seedr.cc/ff_get/5655602284/www.1TamilMV.day%20-%20Badava%20(2025)%20Tamil%20HQ%20HDRip%20-%20720p%20-%20HEVC%20-%20(DD_5.1%20-%20192Kbps%20_%20AAC%202.0)%20-%20950MB%20-%20ESub.mkv?st=3MyX41U-rEABgMnE16wqqQ&e=1745771591"
-forward_url = "https://viber.koyeb.app/ff_get/5655602284/www.1TamilMV.day%20-%20Badava%20(2025)%20Tamil%20HQ%20HDRip%20-%20720p%20-%20HEVC%20-%20(DD_5.1%20-%20192Kbps%20_%20AAC%202.0)%20-%20950MB%20-%20ESub.mkv?st=3MyX41U-rEABgMnE16wqqQ&e=1745771591"
+app = Flask(__name__)
 
-# Forward the URL to another service
-response = requests.get(forward_url)
-if response.status_code == 200:
-    print("Successfully forwarded the URL.")
-else:
-    print(f"Failed to forward the URL. Status Code: {response.status_code}")
+# Simple web page
+HTML = """
+<!doctype html>
+<title>Stream Proxy</title>
+<h2>Paste the Seedr Video Link:</h2>
+<form method="get" action="/play">
+  <input type="text" name="url" style="width:500px">
+  <input type="submit" value="Play">
+</form>
+"""
+
+@app.route('/')
+def home():
+    return render_template_string(HTML)
+
+@app.route('/play')
+def play_video():
+    url = request.args.get('url')
+    if not url:
+        return "No URL provided.", 400
+
+    def generate():
+        with requests.get(url, stream=True) as r:
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+
+    return Response(generate(), content_type='video/mp4')
+
+if __name__ == "__main__":
+    app.run()
