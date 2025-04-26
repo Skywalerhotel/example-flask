@@ -24,24 +24,36 @@ def play_video():
     if not url:
         return "No URL provided.", 400
 
-    # Get the range from the request headers (if any)
+    # Get the Range header from the request
     range_header = request.headers.get('Range', None)
     
-    def generate():
-        with requests.get(url, stream=True, headers={"Range": range_header}) as r:
-            if range_header and r.status_code == 206:  # Partial content response
-                # Stream video content chunk by chunk
-                for chunk in r.iter_content(chunk_size=4096):
-                    if chunk:
-                        yield chunk
+    # Start the request to Seedr
+    with requests.get(url, stream=True, headers={"Range": range_header}) as r:
+        # If Seedr supports range requests, we expect status 206 (Partial Content)
+        if range_header and r.status_code == 206:
+            # Setting the content range for partial content
+            content_range = r.headers.get('Content-Range')
+            content_length = r.headers.get('Content-Length')
+            if content_range:
+                start, end, total = content_range.split(' ')[1].split('/')
+                # Fix: We will include Content-Range and Content-Length for the streaming
+                headers = {
+                    'Content-Range': content_range,
+                    'Content-Length': content_length,
+                    'Accept-Ranges': 'bytes'
+                }
             else:
-                # If no range is requested, just stream the full content
-                for chunk in r.iter_content(chunk_size=4096):
-                    if chunk:
-                        yield chunk
+                headers = {}
+        else:
+            headers = {}
 
-    # Return the video with proper content type and range support
-    return Response(generate(), content_type='video/mp4', status=206 if range_header else 200)
+        # Stream the video content
+        def generate():
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+
+        return Response(generate(), content_type='video/mp4', headers=headers, status=206 if range_header else 200)
 
 if __name__ == "__main__":
     app.run()
