@@ -11,8 +11,8 @@ BASE_URL_TV = "https://col3negtelevision.com"
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def proxy(path):
-    # Decide which base URL
-    if path.startswith("watch") or path.startswith("tvseries") or path.startswith("teledrama"):
+    # Correct target base
+    if path.startswith("watch"):
         target_url = f"{BASE_URL_TV}/{path}"
     else:
         target_url = f"{BASE_URL_MAIN}/{path}" if path else BASE_URL_MAIN
@@ -24,7 +24,7 @@ def proxy(path):
 
     content_type = resp.headers.get('Content-Type', '')
 
-    # Not HTML (maybe image, css, etc)
+    # Not HTML (example: images, css, js)
     if not content_type.startswith('text/html'):
         return Response(resp.content, content_type=content_type)
 
