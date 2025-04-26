@@ -2,7 +2,7 @@ from flask import Flask, request, Response
 import requests
 
 app = Flask(__name__)
-TARGET = "https://example.com"
+TARGET = "https://seedr.cc"
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
