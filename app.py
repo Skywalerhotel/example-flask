@@ -11,7 +11,7 @@ BASE_URL_TV = "https://col3negtelevision.com"
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def proxy(path):
-    # Smart target URL
+    # Detect from path where to fetch
     if path.startswith("watch") or path.startswith("tvseries") or path.startswith("teledrama"):
         target_url = f"{BASE_URL_TV}/{path}"
     else:
@@ -24,41 +24,47 @@ def proxy(path):
 
     content_type = resp.headers.get('Content-Type', '')
 
-    # If not HTML, serve directly
+    # Not HTML
     if not content_type.startswith('text/html'):
         return Response(resp.content, content_type=content_type)
 
     soup = BeautifulSoup(resp.text, 'html.parser')
 
-    # Fix <a href> to stay local
+    # Fix <a href>
     for a_tag in soup.find_all('a', href=True):
         href = a_tag['href']
+
         if href.startswith('http'):
             if 'col3neg.com' in href or 'col3negtelevision.com' in href:
                 href = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', href)
                 if not href.startswith('/'):
                     href = '/' + href
-                a_tag['href'] = href
-        elif href.startswith('/'):
-            a_tag['href'] = href
-        else:
-            a_tag['href'] = f"/{href}"
+            else:
+                # external link (youtube, etc) keep original
+                pass
+        elif not href.startswith('/'):
+            href = '/' + href
 
-    # Fix src for img, script, iframe
+        a_tag['href'] = href
+
+    # Fix src (img, script, iframe, link)
     for tag in soup.find_all(['img', 'script', 'iframe', 'link']):
         attr = 'src' if tag.name in ['img', 'script', 'iframe'] else 'href'
         if tag.has_attr(attr):
             src = tag[attr]
+
             if src.startswith('http'):
                 if 'col3neg.com' in src or 'col3negtelevision.com' in src:
                     src = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', src)
                     if not src.startswith('/'):
                         src = '/' + src
-                    tag[attr] = src
-            elif src.startswith('/'):
-                tag[attr] = src
-            else:
-                tag[attr] = f"/{src}"
+                else:
+                    # external (youtube, css cdn etc) keep
+                    pass
+            elif not src.startswith('/'):
+                src = '/' + src
+
+            tag[attr] = src
 
     # Fix JavaScript redirects
     html = str(soup)
@@ -66,9 +72,6 @@ def proxy(path):
     html = re.sub(r'window\.location\.href\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.location.href="\3"', html)
     html = re.sub(r'window\.top\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.top.location="\3"', html)
     html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.parent.location="\3"', html)
-
-    # Fix iframe src
-    html = re.sub(r'src=[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'src="\3"', html)
 
     return Response(html, content_type='text/html')
 
