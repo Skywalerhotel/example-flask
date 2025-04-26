@@ -5,13 +5,17 @@ import re
 
 app = Flask(__name__)
 
-BASE_URL = "https://col3neg.com"
+BASE_URL_MAIN = "https://col3neg.com"
+BASE_URL_TV = "https://col3negtelevision.com"
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def proxy(path):
-    # Target URL
-    target_url = f"{BASE_URL}/{path}" if path else BASE_URL
+    # Smart target URL
+    if path.startswith("watch") or path.startswith("tvseries") or path.startswith("teledrama"):
+        target_url = f"{BASE_URL_TV}/{path}"
+    else:
+        target_url = f"{BASE_URL_MAIN}/{path}" if path else BASE_URL_MAIN
 
     try:
         resp = requests.get(target_url, timeout=10)
@@ -30,8 +34,7 @@ def proxy(path):
     for a_tag in soup.find_all('a', href=True):
         href = a_tag['href']
         if href.startswith('http'):
-            if BASE_URL in href or 'col3negtelevision.com' in href:
-                # Remove domain, keep path
+            if 'col3neg.com' in href or 'col3negtelevision.com' in href:
                 href = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', href)
                 if not href.startswith('/'):
                     href = '/' + href
@@ -41,13 +44,13 @@ def proxy(path):
         else:
             a_tag['href'] = f"/{href}"
 
-    # Fix all src links too (img, script, iframe)
+    # Fix src for img, script, iframe
     for tag in soup.find_all(['img', 'script', 'iframe', 'link']):
         attr = 'src' if tag.name in ['img', 'script', 'iframe'] else 'href'
         if tag.has_attr(attr):
             src = tag[attr]
             if src.startswith('http'):
-                if BASE_URL in src or 'col3negtelevision.com' in src:
+                if 'col3neg.com' in src or 'col3negtelevision.com' in src:
                     src = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', src)
                     if not src.startswith('/'):
                         src = '/' + src
@@ -64,7 +67,7 @@ def proxy(path):
     html = re.sub(r'window\.top\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.top.location="\3"', html)
     html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.parent.location="\3"', html)
 
-    # Fix iframe src if directly written
+    # Fix iframe src
     html = re.sub(r'src=[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'src="\3"', html)
 
     return Response(html, content_type='text/html')
