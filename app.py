@@ -1,6 +1,7 @@
-from flask import Flask, render_template_string, request, Response, redirect
+from flask import Flask, Response, request
 import requests
 from bs4 import BeautifulSoup
+import re
 
 app = Flask(__name__)
 
@@ -10,59 +11,44 @@ BASE_URL = "https://col3neg.com"
 @app.route('/<path:path>')
 def proxy(path):
     # Target URL
-    target_url = f"{BASE_URL}/{path}"
-    if path == "":
-        target_url = BASE_URL
+    target_url = f"{BASE_URL}/{path}" if path else BASE_URL
 
     # Get the page
-    resp = requests.get(target_url, allow_redirects=False)
+    try:
+        resp = requests.get(target_url, timeout=10)
+    except requests.RequestException:
+        return "Error fetching page.", 500
 
-    # If redirect
-    if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
-        location = resp.headers.get('Location', '')
-        if location.startswith(BASE_URL):
-            location = location.replace(BASE_URL, '')
-            return redirect(location)
-        else:
-            return redirect(location)
-
-    # If not HTML, like CSS/JS/Image, serve directly
     content_type = resp.headers.get('Content-Type', '')
+
+    # If not HTML, serve directly
     if not content_type.startswith('text/html'):
         return Response(resp.content, content_type=content_type)
 
     # Parse HTML
     soup = BeautifulSoup(resp.text, 'html.parser')
 
-    # Fix all <a href="">
-    for a_tag in soup.find_all('a', href=True):
-        href = a_tag['href']
-        if href.startswith(BASE_URL):
-            href = href.replace(BASE_URL, '')
-        if href.startswith('/'):
-            a_tag['href'] = href
-        elif href.startswith('http'):
-            pass
-        else:
-            a_tag['href'] = f"/{href}"
-
-    # Fix all <img>, <script>, <link>
-    for tag in soup.find_all(['img', 'script', 'link']):
-        attr = 'src' if tag.name in ['img', 'script'] else 'href'
+    # Replace all <a>, <link>, <script>, <img> href/src to local
+    for tag in soup.find_all(['a', 'link', 'script', 'img']):
+        attr = 'href' if tag.name in ['a', 'link'] else 'src'
         if tag.has_attr(attr):
-            link = tag[attr]
-            if link.startswith(BASE_URL):
-                link = link.replace(BASE_URL, '')
-            if link.startswith('/'):
-                tag[attr] = link
-            elif link.startswith('http'):
+            original = tag[attr]
+            if original.startswith(BASE_URL):
+                original = original.replace(BASE_URL, '')
+            if original.startswith('/'):
+                tag[attr] = original
+            elif original.startswith('http'):
+                # External links (ads, youtube, etc) you may want to allow or block
                 pass
             else:
-                tag[attr] = f"/{link}"
+                tag[attr] = f"/{original}"
 
-    # (Optional) Remove tracking scripts / ads here if you want
+    # Also fix possible internal JS redirects (window.location)
+    html = str(soup)
+    html = re.sub(r'window\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location="/\1"', html)
+    html = re.sub(r'window\.location\.href\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location.href="/\1"', html)
 
-    return render_template_string(str(soup))
+    return Response(html, content_type='text/html')
 
 if __name__ == "__main__":
     app.run(debug=True)
