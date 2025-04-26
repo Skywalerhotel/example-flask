@@ -13,7 +13,6 @@ def proxy(path):
     # Target URL
     target_url = f"{BASE_URL}/{path}" if path else BASE_URL
 
-    # Get the page
     try:
         resp = requests.get(target_url, timeout=10)
     except requests.RequestException:
@@ -25,11 +24,10 @@ def proxy(path):
     if not content_type.startswith('text/html'):
         return Response(resp.content, content_type=content_type)
 
-    # Parse HTML
     soup = BeautifulSoup(resp.text, 'html.parser')
 
-    # Replace all <a>, <link>, <script>, <img> href/src to local
-    for tag in soup.find_all(['a', 'link', 'script', 'img']):
+    # Fix all internal links
+    for tag in soup.find_all(['a', 'link', 'script', 'img', 'iframe']):
         attr = 'href' if tag.name in ['a', 'link'] else 'src'
         if tag.has_attr(attr):
             original = tag[attr]
@@ -38,15 +36,22 @@ def proxy(path):
             if original.startswith('/'):
                 tag[attr] = original
             elif original.startswith('http'):
-                # External links (ads, youtube, etc) you may want to allow or block
+                # External links (ad/youtube): allow or block
                 pass
             else:
                 tag[attr] = f"/{original}"
 
-    # Also fix possible internal JS redirects (window.location)
+    # String hacks for javascript redirects
     html = str(soup)
+
+    # Fix various JavaScript redirects
     html = re.sub(r'window\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location="/\1"', html)
     html = re.sub(r'window\.location\.href\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location.href="/\1"', html)
+    html = re.sub(r'window\.top\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.top.location="/\1"', html)
+    html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.parent.location="/\1"', html)
+
+    # Also fix iframe src if directly written
+    html = re.sub(r'src=[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'src="/\1"', html)
 
     return Response(html, content_type='text/html')
 
