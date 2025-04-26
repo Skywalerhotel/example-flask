@@ -1,48 +1,103 @@
-from flask import Flask, request, Response, redirect
+from flask import Flask, Response, request
 import requests
+from bs4 import BeautifulSoup
+import re
 
 app = Flask(__name__)
-TARGET = "https://www.seedr.cc"
 
-# Copy all request headers except 'host'
-def get_headers():
-    headers = {}
-    for h in request.headers:
-        if h[0].lower() != 'host':
-            headers[h[0]] = h[1]
-    return headers
+BASE_URL_MAIN = "https://col3neg.com"
+BASE_URL_TV = "https://col3negtelevision.com"
+BASE_URL_PROXY = "https://viber.koyeb.app"  # Replace with your proxy server URL
 
-@app.route('/', defaults={'path': ''}, methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-@app.route('/<path:path>', methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
 def proxy(path):
-    url = f"{TARGET}/{path}"
-    
-    # Forward request to seedr
-    resp = requests.request(
-        method=request.method,
-        url=url,
-        headers=get_headers(),
-        params=request.args,
-        data=request.get_data(),
-        cookies=request.cookies,
-        allow_redirects=False,
-        stream=True,
+    # Smart URL detection
+    if path.startswith("watch"):
+        target_url = f"{BASE_URL_TV}/{path}"
+    elif path.startswith("video"):
+        try:
+            parts = path.split('/')
+            series_slug = parts[1] if len(parts) > 1 else ''
+            video_id = parts[2] if len(parts) > 2 else ''
+            watch_slug = f"watch-{series_slug}-{video_id}.html"
+            target_url = f"{BASE_URL_TV}/{watch_slug}"
+        except Exception:
+            return "Error parsing video URL", 400
+    else:
+        target_url = f"{BASE_URL_MAIN}/{path}" if path else BASE_URL_MAIN
+
+    # Proxy headers
+    headers = {
+        "User-Agent": request.headers.get("User-Agent", "Mozilla/5.0")
+    }
+
+    try:
+        resp = requests.get(target_url, headers=headers, timeout=10)
+    except requests.RequestException:
+        return "Error fetching page.", 500
+
+    content_type = resp.headers.get('Content-Type', '')
+
+    # For non-HTML (images, css, js, fonts)
+    if not content_type.startswith('text/html'):
+        return Response(resp.content, content_type=content_type)
+
+    # Process HTML
+    soup = BeautifulSoup(resp.text, 'html.parser')
+
+    # Rewrite all <a> href to go through the proxy server
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        if href.startswith('http'):
+            if 'col3neg.com' in href or 'col3negtelevision.com' in href:
+                href = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', BASE_URL_PROXY, href)
+                if not href.startswith('/'):
+                    href = '/' + href
+        elif not href.startswith('/'):
+            href = '/' + href
+        a_tag['href'] = href
+
+    # Rewrite src in img, iframe, script, link to go through the proxy server
+    for tag in soup.find_all(['img', 'iframe', 'script', 'link']):
+        attr = 'src' if tag.name in ['img', 'iframe', 'script'] else 'href'
+        if tag.has_attr(attr):
+            src = tag[attr]
+            if src.startswith('http'):
+                if 'col3neg.com' in src or 'col3negtelevision.com' in src:
+                    src = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', BASE_URL_PROXY, src)
+                    if not src.startswith('/'):
+                        src = '/' + src
+            elif not src.startswith('/'):
+                src = '/' + src
+            tag[attr] = src
+
+    # Kill ad iframes (OPTIONAL)
+    for iframe in soup.find_all('iframe', src=True):
+        if any(ad_domain in iframe['src'] for ad_domain in ['ads.com', 'adsterra', 'popads', 'propellerads']):
+            iframe.decompose()  # Remove ad iframe completely
+
+    html = str(soup)
+
+    # Fix JavaScript redirects
+    js_patterns = [
+        r'window\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3negtelevision\.com|col3neg\.com)([^\'"]*)[\'"]',
+        r'window\.location\.href\s*=\s*[\'"]https?:\/\/(www\.)?(col3negtelevision\.com|col3neg\.com)([^\'"]*)[\'"]',
+        r'window\.top\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3negtelevision\.com|col3neg\.com)([^\'"]*)[\'"]',
+        r'window\.parent\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3negtelevision\.com|col3neg\.com)([^\'"]*)[\'"]',
+    ]
+    for pattern in js_patterns:
+        html = re.sub(pattern, r'window.location="\3"', html)
+
+    # Fix meta refresh redirects
+    html = re.sub(
+        r'<meta\s+http-equiv=["\']refresh["\']\s+content=["\']\d+;\s*url=(https?:\/\/(www\.)?(col3negtelevision\.com|col3neg\.com))([^"\']*)["\']',
+        lambda m: f'<meta http-equiv="refresh" content="0;url={BASE_URL_PROXY}{m.group(4)}"',
+        html,
+        flags=re.IGNORECASE
     )
 
-    # Handle redirects manually (important for login)
-    if resp.status_code in (301, 302, 303, 307, 308):
-        redirect_location = resp.headers.get('Location')
-        if redirect_location.startswith(TARGET):
-            redirect_location = redirect_location[len(TARGET):]
-        return redirect(redirect_location, code=resp.status_code)
-
-    # Exclude problematic headers
-    excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-    headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in excluded_headers]
-    
-    # Send back the response
-    response = Response(resp.content, resp.status_code, headers)
-    return response
+    return Response(html, content_type='text/html')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
