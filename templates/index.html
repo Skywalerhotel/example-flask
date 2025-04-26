@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Virtual Browser</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Remote Browser</h1>
+    <img id="screen" style="width: 100%; height: auto;" />
+    <script>
+        const socket = io();
+
+        socket.on('screenshot', (data) => {
+            document.getElementById('screen').src = data.img;
+        });
+
+        const img = document.getElementById('screen');
+
+        img.addEventListener('click', (e) => {
+            const rect = img.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            socket.emit('click', {x: x, y: y});
+        });
+
+        window.addEventListener('keydown', (e) => {
+            socket.emit('keypress', {key: e.key});
+        });
+    </script>
+</body>
+</html>
