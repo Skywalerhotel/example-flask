@@ -16,7 +16,7 @@ HTML = """
 <hr>
 
 <video id="videoPlayer" controls>
-  <source id="videoSource" src="" type="video/mp4">
+  <source id="videoSource" src="" type="video/x-matroska">
   Your browser does not support the video tag.
 </video>
 
@@ -64,13 +64,25 @@ def play_video():
     if not url:
         return "No URL provided.", 400
 
+    # Handling HTTP Range requests to support seeking
+    range_header = request.headers.get('Range', None)
+    headers = {}
+    if range_header:
+        headers['Range'] = range_header
+
     def generate():
-        with requests.get(url, stream=True) as r:
+        with requests.get(url, stream=True, headers=headers) as r:
+            if r.status_code == 206:  # Partial content
+                content_range = r.headers.get('Content-Range')
+                total_length = int(content_range.split('/')[-1]) if content_range else 0
+            else:
+                total_length = 0
+
             for chunk in r.iter_content(chunk_size=4096):
                 if chunk:
                     yield chunk
 
-    return Response(generate(), content_type='video/mp4', status=206)
+    return Response(generate(), content_type='video/x-matroska', status=206)
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
