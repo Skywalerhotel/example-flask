@@ -24,7 +24,9 @@ def proxy(path):
         except Exception:
             return "Error parsing video URL", 400
     elif path.startswith("embed"):
-        target_url = f"{BASE_URL_MAIN}/{path}"
+        target_url = f"{BASE_URL_TV}/{path}"
+        if request.query_string:
+            target_url += '?' + request.query_string.decode('utf-8')
     else:
         target_url = f"{BASE_URL_MAIN}/{path}" if path else BASE_URL_MAIN
 
@@ -101,10 +103,15 @@ def proxy(path):
 # Special route for embeds (videos)
 @app.route('/embed/<video_id>')
 def embed(video_id):
-    target_url = f"{BASE_URL_MAIN}/embed/{video_id}"
+    query = request.query_string.decode('utf-8')
+    target_url = f"{BASE_URL_TV}/embed/{video_id}"
+    if query:
+        target_url += '?' + query
+
     headers = {
         "User-Agent": request.headers.get("User-Agent", "Mozilla/5.0")
     }
+
     try:
         resp = requests.get(target_url, headers=headers, timeout=10)
     except requests.RequestException:
@@ -120,8 +127,8 @@ def embed(video_id):
     for iframe in soup.find_all('iframe', src=True):
         src = iframe['src']
         if src.startswith('http'):
-            if 'col3neg.com' in src:
-                src = re.sub(r'^https?:\/\/(www\.)?col3neg\.com', '', src)
+            if 'col3neg.com' in src or 'col3negtelevision.com' in src:
+                src = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', src)
                 if not src.startswith('/'):
                     src = '/' + src
         iframe['src'] = src
@@ -131,3 +138,4 @@ def embed(video_id):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
