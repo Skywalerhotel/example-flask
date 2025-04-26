@@ -1,71 +1,99 @@
-from flask import Flask, Response, request
-import requests
-from bs4 import BeautifulSoup
-import re
+from flask import Flask, Response, request, jsonify, render_template_string
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import threading
+import time
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 
-BASE_URL = "https://tamilvip.bike"
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--window-size=1280x720")  # 720p HD
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def proxy(path):
-    # Target URL
-    target_url = f"{BASE_URL}/{path}" if path else BASE_URL
+driver = webdriver.Chrome(options=chrome_options)
+lock = threading.Lock()
 
-    try:
-        resp = requests.get(target_url, timeout=10)
-    except requests.RequestException:
-        return "Error fetching page.", 500
+def get_screenshot():
+    with lock:
+        png = driver.get_screenshot_as_png()
+    np_arr = np.frombuffer(png, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    _, jpeg = cv2.imencode('.jpg', img)
+    return jpeg.tobytes()
 
-    content_type = resp.headers.get('Content-Type', '')
+def generate():
+    while True:
+        frame = get_screenshot()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        time.sleep(0.2)
 
-    if not content_type.startswith('text/html'):
-        return Response(resp.content, content_type=content_type)
+@app.route('/')
+def home():
+    return "Remote browser server is running!"
 
-    soup = BeautifulSoup(resp.text, 'html.parser')
+@app.route('/open', methods=['POST'])
+def open_url():
+    data = request.get_json()
+    url = data.get('url')
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
 
-    # Fix <a href> links
-    for a_tag in soup.find_all('a', href=True):
-        href = a_tag['href']
-        if href.startswith('http'):
-            if BASE_URL in href:
-                href = re.sub(r'^https?:\/\/(www\.)?tamilyogi\.blog', '', href)
-                if not href.startswith('/'):
-                    href = '/' + href
-                a_tag['href'] = href
-        elif href.startswith('/'):
-            a_tag['href'] = href
-        else:
-            a_tag['href'] = f"/{href}"
+    with lock:
+        try:
+            driver.set_page_load_timeout(10)
+            driver.get(url)
+            return jsonify({'title': driver.title})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
-    # Fix images, scripts, etc
-    for tag in soup.find_all(['img', 'script', 'iframe', 'link']):
-        attr = 'src' if tag.name in ['img', 'script', 'iframe'] else 'href'
-        if tag.has_attr(attr):
-            src = tag[attr]
-            if src.startswith('http'):
-                if BASE_URL in src:
-                    src = re.sub(r'^https?:\/\/(www\.)?tamilyogi\.blog', '', src)
-                    if not src.startswith('/'):
-                        src = '/' + src
-                    tag[attr] = src
-            elif src.startswith('/'):
-                tag[attr] = src
-            else:
-                tag[attr] = f"/{src}"
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    # Fix JavaScript redirections
-    html = str(soup)
-    html = re.sub(r'window\.location\s*=\s*[\'"]https?:\/\/(www\.)?tamilyogi\.blog([^\'"]*)[\'"]', r'window.location="\2"', html)
-    html = re.sub(r'window\.location\.href\s*=\s*[\'"]https?:\/\/(www\.)?tamilyogi\.blog([^\'"]*)[\'"]', r'window.location.href="\2"', html)
-    html = re.sub(r'window\.top\.location\s*=\s*[\'"]https?:\/\/(www\.)?tamilyogi\.blog([^\'"]*)[\'"]', r'window.top.location="\2"', html)
-    html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https?:\/\/(www\.)?tamilyogi\.blog([^\'"]*)[\'"]', r'window.parent.location="\2"', html)
+@app.route('/stream')
+def stream():
+    return render_template_string('''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Remote Browser</title>
+    <style>
+        body { margin: 0; background: black; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        img { max-width: 100%; max-height: 100vh; }
+        button { padding: 10px 20px; font-size: 20px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <img id="stream" src="/video_feed">
+    <button onclick="goFullScreen()">Go Full Screen</button>
 
-    # Fix iframe src too
-    html = re.sub(r'src=[\'"]https?:\/\/(www\.)?tamilyogi\.blog([^\'"]*)[\'"]', r'src="\2"', html)
+    <script>
+        function goFullScreen() {
+            var img = document.getElementById("stream");
+            if (img.requestFullscreen) {
+                img.requestFullscreen();
+            } else if (img.webkitRequestFullscreen) {
+                img.webkitRequestFullscreen();
+            } else if (img.msRequestFullscreen) {
+                img.msRequestFullscreen();
+            }
+        }
+    </script>
+</body>
+</html>
+''')
 
-    return Response(html, content_type='text/html')
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    with lock:
+        driver.quit()
+    return jsonify({'message': 'Browser closed'})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080)
