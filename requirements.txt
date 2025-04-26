@@ -3,3 +3,4 @@ selenium
 opencv-python
 numpy
 gunicorn
+requests
