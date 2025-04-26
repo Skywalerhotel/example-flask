@@ -26,32 +26,46 @@ def proxy(path):
 
     soup = BeautifulSoup(resp.text, 'html.parser')
 
-    # Fix all internal links
-    for tag in soup.find_all(['a', 'link', 'script', 'img', 'iframe']):
-        attr = 'href' if tag.name in ['a', 'link'] else 'src'
+    # Fix <a href> to stay local
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        if href.startswith('http'):
+            if BASE_URL in href or 'col3negtelevision.com' in href:
+                # Remove domain, keep path
+                href = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', href)
+                if not href.startswith('/'):
+                    href = '/' + href
+                a_tag['href'] = href
+        elif href.startswith('/'):
+            a_tag['href'] = href
+        else:
+            a_tag['href'] = f"/{href}"
+
+    # Fix all src links too (img, script, iframe)
+    for tag in soup.find_all(['img', 'script', 'iframe', 'link']):
+        attr = 'src' if tag.name in ['img', 'script', 'iframe'] else 'href'
         if tag.has_attr(attr):
-            original = tag[attr]
-            if original.startswith(BASE_URL):
-                original = original.replace(BASE_URL, '')
-            if original.startswith('/'):
-                tag[attr] = original
-            elif original.startswith('http'):
-                # External links (ad/youtube): allow or block
-                pass
+            src = tag[attr]
+            if src.startswith('http'):
+                if BASE_URL in src or 'col3negtelevision.com' in src:
+                    src = re.sub(r'^https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)', '', src)
+                    if not src.startswith('/'):
+                        src = '/' + src
+                    tag[attr] = src
+            elif src.startswith('/'):
+                tag[attr] = src
             else:
-                tag[attr] = f"/{original}"
+                tag[attr] = f"/{src}"
 
-    # String hacks for javascript redirects
+    # Fix JavaScript redirects
     html = str(soup)
+    html = re.sub(r'window\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.location="\3"', html)
+    html = re.sub(r'window\.location\.href\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.location.href="\3"', html)
+    html = re.sub(r'window\.top\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.top.location="\3"', html)
+    html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'window.parent.location="\3"', html)
 
-    # Fix various JavaScript redirects
-    html = re.sub(r'window\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location="/\1"', html)
-    html = re.sub(r'window\.location\.href\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.location.href="/\1"', html)
-    html = re.sub(r'window\.top\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.top.location="/\1"', html)
-    html = re.sub(r'window\.parent\.location\s*=\s*[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'window.parent.location="/\1"', html)
-
-    # Also fix iframe src if directly written
-    html = re.sub(r'src=[\'"]https:\/\/col3neg\.com([^\'"]*)[\'"]', r'src="/\1"', html)
+    # Fix iframe src if directly written
+    html = re.sub(r'src=[\'"]https?:\/\/(www\.)?(col3neg\.com|col3negtelevision\.com)([^\'"]*)[\'"]', r'src="\3"', html)
 
     return Response(html, content_type='text/html')
 
