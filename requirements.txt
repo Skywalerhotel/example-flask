@@ -7,3 +7,6 @@ MarkupSafe==2.1.1
 Werkzeug==2.2.2
 beautifulsoup4==4.12.3
 requests==2.31.0
+flask-socketio==5.3.4
+eventlet==0.33.3
+pyppeteer==1.0.2
