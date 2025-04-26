@@ -5,7 +5,7 @@ import re
 
 app = Flask(__name__)
 
-BASE_URL = "https://tamilyogi.blog"
+BASE_URL = "https://tamilvip.bike"
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
