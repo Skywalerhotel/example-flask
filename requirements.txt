@@ -4,3 +4,5 @@ opencv-python
 numpy
 gunicorn
 requests
+beautifulsoup4
+lxml
