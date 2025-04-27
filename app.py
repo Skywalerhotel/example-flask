@@ -1,95 +1,16 @@
-from flask import Flask, request, Response, render_template_string, stream_with_context, redirect
+from flask import Flask, request, Response, url_for, render_template_string, stream_with_context
 import requests
 import urllib.parse
 import re
 
 app = Flask(__name__)
 
-# Home page
-HOME_HTML = """
-<!doctype html>
-<html lang="en">
-<head>
-    <title>Simple Full Proxy</title>
-</head>
-<body>
-    <h2>Enter a URL to Proxy:</h2>
-    <form action="/fetch" method="get">
-        <input type="text" name="url" placeholder="https://example.com" required style="width:400px;">
-        <input type="submit" value="Go">
-    </form>
-</body>
-</html>
-"""
-
-@app.route('/')
-def home():
-    return render_template_string(HOME_HTML)
-
-@app.route('/fetch')
-def fetch():
-    target_url = request.args.get('url')
-    if not target_url:
-        return "Error: No URL provided.", 400
-
-    try:
-        # Fetch the external page
-        upstream_response = requests.get(target_url, stream=True, timeout=15)
-
-        content_type = upstream_response.headers.get('Content-Type', '')
-
-        if 'text/html' in content_type:
-            # HTML page — rewrite links
-            html = upstream_response.content.decode('utf-8', errors='ignore')
-
-            parsed_url = urllib.parse.urlparse(target_url)
-            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-
-            def rewrite_link(match):
-                original_url = match.group(2)
-                if original_url.startswith(('http://', 'https://')):
-                    if is_video(original_url):
-                        new_url = '/stream?url=' + urllib.parse.quote(original_url)
-                    else:
-                        new_url = '/fetch?url=' + urllib.parse.quote(original_url)
-                elif original_url.startswith('//'):
-                    full_url = parsed_url.scheme + ':' + original_url
-                    if is_video(full_url):
-                        new_url = '/stream?url=' + urllib.parse.quote(full_url)
-                    else:
-                        new_url = '/fetch?url=' + urllib.parse.quote(full_url)
-                else:
-                    absolute_url = urllib.parse.urljoin(base_url, original_url)
-                    if is_video(absolute_url):
-                        new_url = '/stream?url=' + urllib.parse.quote(absolute_url)
-                    else:
-                        new_url = '/fetch?url=' + urllib.parse.quote(absolute_url)
-                return f'{match.group(1)}="{new_url}"'
-
-            html = re.sub(r'(src|href|action)\s*=\s*["\']([^"\']+)["\']', rewrite_link, html, flags=re.IGNORECASE)
-
-            return Response(html, content_type=content_type)
-
-        else:
-            # Non-HTML (image, css, js, etc) — direct stream
-            @stream_with_context
-            def stream_content():
-                for chunk in upstream_response.iter_content(chunk_size=16384):
-                    if chunk:
-                        yield chunk
-
-            headers = {'Content-Type': content_type}
-            return Response(stream_content(), status=upstream_response.status_code, headers=headers)
-
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching URL: {e}", 502
-
-# --- Special Route for video streaming (with Range support) ---
+# --- STREAM VIDEO ROUTE ---
 @app.route('/stream')
 def stream_video():
     encoded_url = request.args.get('url')
     if not encoded_url:
-        return "Error: Missing URL parameter.", 400
+        return "Error: Missing video URL.", 400
 
     try:
         video_url = urllib.parse.unquote(encoded_url)
@@ -102,35 +23,129 @@ def stream_video():
         headers['Range'] = range_header
 
     try:
-        upstream_response = requests.get(video_url, headers=headers, stream=True, timeout=30)
-        if not upstream_response.ok and upstream_response.status_code not in [200, 206]:
-            upstream_response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching video URL: {e}", 502
+        upstream = requests.get(video_url, headers=headers, stream=True, timeout=30)
+        if not upstream.ok and upstream.status_code not in (200, 206):
+            upstream.raise_for_status()
+    except Exception as e:
+        return f"Error fetching video: {e}", 502
 
-    # Stream the video
     @stream_with_context
     def generate():
-        try:
-            for chunk in upstream_response.iter_content(chunk_size=16384):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream_response.close()
+        for chunk in upstream.iter_content(16384):
+            if chunk:
+                yield chunk
+        upstream.close()
 
     response_headers = {}
-    for key in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range']:
-        if key in upstream_response.headers:
-            response_headers[key] = upstream_response.headers[key]
+    for h in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']:
+        if h in upstream.headers:
+            response_headers[h] = upstream.headers[h]
 
-    if 'Accept-Ranges' not in response_headers and upstream_response.status_code == 206:
-        response_headers['Accept-Ranges'] = 'bytes'
+    return Response(generate(), headers=response_headers, status=upstream.status_code)
 
-    return Response(generate(), status=upstream_response.status_code, headers=response_headers)
+# --- FETCH OTHER FILES (IMAGES, CSS, JS) ---
+@app.route('/fetch')
+def fetch_file():
+    encoded_url = request.args.get('url')
+    if not encoded_url:
+        return "Error: Missing file URL.", 400
 
-# --- Helper function to detect if a URL is a video ---
-def is_video(url):
-    return url.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m3u8', '.ts'))
+    try:
+        file_url = urllib.parse.unquote(encoded_url)
+    except Exception as e:
+        return f"Error decoding URL: {e}", 400
 
+    try:
+        upstream = requests.get(file_url, stream=True, timeout=30)
+        upstream.raise_for_status()
+    except Exception as e:
+        return f"Error fetching file: {e}", 502
+
+    @stream_with_context
+    def generate():
+        for chunk in upstream.iter_content(16384):
+            if chunk:
+                yield chunk
+        upstream.close()
+
+    response_headers = {}
+    for h in ['Content-Type', 'Content-Length', 'Cache-Control', 'ETag']:
+        if h in upstream.headers:
+            response_headers[h] = upstream.headers[h]
+
+    return Response(generate(), headers=response_headers, status=upstream.status_code)
+
+# --- PROXY WEB PAGE ---
+@app.route('/proxy')
+def proxy_page():
+    encoded_url = request.args.get('url')
+    if not encoded_url:
+        return "Error: Missing page URL.", 400
+
+    try:
+        target_url = urllib.parse.unquote(encoded_url)
+    except Exception as e:
+        return f"Error decoding URL: {e}", 400
+
+    try:
+        resp = requests.get(target_url, timeout=30)
+        resp.raise_for_status()
+        html = resp.text
+    except Exception as e:
+        return f"Error fetching page: {e}", 502
+
+    base_url = target_url
+
+    def replace_src_href(match):
+        attr = match.group(1)
+        orig = match.group(2)
+
+        # Make absolute URL
+        if orig.startswith(('http://', 'https://')):
+            full = orig
+        elif orig.startswith('//'):
+            full = 'https:' + orig
+        else:
+            full = urllib.parse.urljoin(base_url, orig)
+
+        # Video or normal file
+        if full.lower().endswith(('.mp4', '.webm', '.ogg', '.m3u8')):
+            proxy_link = url_for('stream_video', url=urllib.parse.quote(full))
+            return f'{attr}="{proxy_link}" crossorigin="anonymous"'
+        else:
+            proxy_link = url_for('fetch_file', url=urllib.parse.quote(full))
+            return f'{attr}="{proxy_link}"'
+
+    # Rewrite src and href links
+    html = re.sub(r'(src|href)=["\']([^"\']+)["\']', replace_src_href, html)
+
+    return html
+
+# --- HOME PAGE ---
+@app.route('/')
+def home():
+    return render_template_string('''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Proxy Server</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #f4f4f4; text-align: center; margin-top: 100px; }
+            input[type=text] { width: 300px; padding: 10px; }
+            button { padding: 10px 20px; background: #28a745; color: white; border: none; }
+            button:hover { background: #218838; }
+        </style>
+    </head>
+    <body>
+        <h2>Enter a URL to Proxy:</h2>
+        <form method="get" action="/proxy">
+            <input name="url" placeholder="https://tamilvip.bike/..." required>
+            <button type="submit">Go</button>
+        </form>
+    </body>
+    </html>
+    ''')
+
+# --- START SERVER ---
 if __name__ == "__main__":
     app.run()
