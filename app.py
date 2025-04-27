@@ -1,151 +1,164 @@
-from flask import Flask, request, Response, url_for, render_template_string, stream_with_context
+from flask import Flask, request, Response, render_template_string, url_for
 import requests
 import urllib.parse
+from bs4 import BeautifulSoup
 import re
 
 app = Flask(__name__)
 
-# --- STREAM VIDEO ROUTE ---
-@app.route('/stream')
-def stream_video():
-    encoded_url = request.args.get('url')
-    if not encoded_url:
-        return "Error: Missing video URL.", 400
+# --- HTML Templates ---
+HOME_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Universal Proxy</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f4; }
+        h2 { color: #333; margin-top: 2em; }
+        form { background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 2em; }
+        input[type=text] { width: calc(100% - 100px); max-width: 500px; padding: 10px; margin-right: 10px; border: 1px solid #ccc; border-radius: 3px; }
+        input[type=submit] { padding: 10px 15px; background-color: #5cb85c; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        input[type=submit]:hover { background-color: #4cae4c; }
+        .notice { color: #666; font-size: 0.9em; margin-top: 0.5em; }
+    </style>
+</head>
+<body>
+    <h2>Stream Video:</h2>
+    <form method="get" action="{{ url_for('show_player') }}">
+      <input type="text" name="url" placeholder="https://example.com/video.mp4" required>
+      <input type="submit" value="Play">
+    </form>
+    <div class="notice">Supports MP4, WebM, and other video formats with range requests</div>
+
+    <h2>Browse Website:</h2>
+    <form method="get" action="{{ url_for('proxy_website') }}">
+      <input type="text" name="url" placeholder="https://example.com/" required>
+      <input type="submit" value="Browse">
+    </form>
+    <div class="notice">All website resources will be proxied through this server</div>
+</body>
+</html>
+"""
+
+VIDEO_PLAYER_HTML = """
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Video Player</title>
+    <style>
+        body { margin: 0; background: #000; }
+        video { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <video controls autoplay playsinline>
+        <source src="{{ video_url }}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</body>
+</html>
+"""
+
+# --- Flask Routes ---
+@app.route('/')
+def home():
+    return render_template_string(HOME_HTML)
+
+@app.route('/player')
+def show_player():
+    video_url = request.args.get('url')
+    if not video_url:
+        return "Missing video URL", 400
+    
+    proxied_url = url_for('proxy_resource', url=video_url)
+    return render_template_string(VIDEO_PLAYER_HTML, video_url=proxied_url)
+
+@app.route('/proxy-website')
+def proxy_website():
+    base_url = request.args.get('url')
+    if not base_url:
+        return "Missing website URL", 400
+
+    if not base_url.startswith(('http://', 'https://')):
+        base_url = 'http://' + base_url
 
     try:
-        video_url = urllib.parse.unquote(encoded_url)
+        response = requests.get(base_url, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
     except Exception as e:
-        return f"Error decoding URL: {e}", 400
+        return f"Error fetching website: {str(e)}", 502
 
-    range_header = request.headers.get('Range')
+    content_type = response.headers.get('Content-Type', '')
+    if 'text/html' not in content_type:
+        return Response(response.content, content_type=content_type)
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    tags_attrs = {
+        'a': 'href',
+        'link': 'href',
+        'img': 'src',
+        'script': 'src',
+        'iframe': 'src',
+        'form': 'action',
+        'source': 'src',
+        'video': 'poster',
+        'audio': 'src',
+    }
+
+    for tag_name, attr in tags_attrs.items():
+        for tag in soup.find_all(tag_name):
+            if tag.get(attr):
+                absolute_url = urllib.parse.urljoin(base_url, tag[attr])
+                tag[attr] = url_for('proxy_resource', url=absolute_url)
+
+    # Handle srcset attributes
+    for img in soup.find_all('img', srcset=True):
+        new_srcset = []
+        for source in img['srcset'].split(','):
+            url_part = source.strip().split()[0]
+            absolute_url = urllib.parse.urljoin(base_url, url_part)
+            new_srcset.append(source.replace(url_part, url_for('proxy_resource', url=absolute_url)))
+        img['srcset'] = ','.join(new_srcset)
+
+    # Handle CSS url() references
+    for style in soup.find_all('style'):
+        if style.string:
+            style.string = re.sub(
+                r'url\((["\']?)(.*?)\1\)',
+                lambda m: f'url({m.group(1)}{url_for("proxy_resource", url=urllib.parse.urljoin(base_url, m.group(2)))}{m.group(1)})',
+                style.string
+            )
+
+    return Response(str(soup), content_type='text/html')
+
+@app.route('/proxy/<path:url>')
+def proxy_resource(url):
     headers = {}
+    range_header = request.headers.get('Range')
     if range_header:
         headers['Range'] = range_header
 
     try:
-        upstream = requests.get(video_url, headers=headers, stream=True, timeout=30)
-        if not upstream.ok and upstream.status_code not in (200, 206):
-            upstream.raise_for_status()
+        resp = requests.get(url, headers=headers, stream=True)
+        if resp.status_code not in (200, 206):
+            resp.raise_for_status()
     except Exception as e:
-        return f"Error fetching video: {e}", 502
+        return f"Error fetching resource: {str(e)}", 502
 
-    @stream_with_context
-    def generate():
-        for chunk in upstream.iter_content(16384):
-            if chunk:
-                yield chunk
-        upstream.close()
+    excluded_headers = ['content-encoding', 'transfer-encoding', 'connection']
+    response_headers = [
+        (k, v) for k, v in resp.raw.headers.items()
+        if k.lower() not in excluded_headers
+    ]
 
-    response_headers = {}
-    for h in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']:
-        if h in upstream.headers:
-            response_headers[h] = upstream.headers[h]
+    return Response(
+        resp.iter_content(chunk_size=16384),
+        status=resp.status_code,
+        headers=response_headers
+    )
 
-    return Response(generate(), headers=response_headers, status=upstream.status_code)
-
-# --- FETCH OTHER FILES (IMAGES, CSS, JS) ---
-@app.route('/fetch')
-def fetch_file():
-    encoded_url = request.args.get('url')
-    if not encoded_url:
-        return "Error: Missing file URL.", 400
-
-    try:
-        file_url = urllib.parse.unquote(encoded_url)
-    except Exception as e:
-        return f"Error decoding URL: {e}", 400
-
-    try:
-        upstream = requests.get(file_url, stream=True, timeout=30)
-        upstream.raise_for_status()
-    except Exception as e:
-        return f"Error fetching file: {e}", 502
-
-    @stream_with_context
-    def generate():
-        for chunk in upstream.iter_content(16384):
-            if chunk:
-                yield chunk
-        upstream.close()
-
-    response_headers = {}
-    for h in ['Content-Type', 'Content-Length', 'Cache-Control', 'ETag']:
-        if h in upstream.headers:
-            response_headers[h] = upstream.headers[h]
-
-    return Response(generate(), headers=response_headers, status=upstream.status_code)
-
-# --- PROXY WEB PAGE ---
-@app.route('/proxy')
-def proxy_page():
-    encoded_url = request.args.get('url')
-    if not encoded_url:
-        return "Error: Missing page URL.", 400
-
-    try:
-        target_url = urllib.parse.unquote(encoded_url)
-    except Exception as e:
-        return f"Error decoding URL: {e}", 400
-
-    try:
-        resp = requests.get(target_url, timeout=30)
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        return f"Error fetching page: {e}", 502
-
-    base_url = target_url
-
-    def replace_src_href(match):
-        attr = match.group(1)
-        orig = match.group(2)
-
-        # Make absolute URL
-        if orig.startswith(('http://', 'https://')):
-            full = orig
-        elif orig.startswith('//'):
-            full = 'https:' + orig
-        else:
-            full = urllib.parse.urljoin(base_url, orig)
-
-        # Video or normal file
-        if full.lower().endswith(('.mp4', '.webm', '.ogg', '.m3u8')):
-            proxy_link = url_for('stream_video', url=urllib.parse.quote(full))
-            return f'{attr}="{proxy_link}" crossorigin="anonymous"'
-        else:
-            proxy_link = url_for('fetch_file', url=urllib.parse.quote(full))
-            return f'{attr}="{proxy_link}"'
-
-    # Rewrite src and href links
-    html = re.sub(r'(src|href)=["\']([^"\']+)["\']', replace_src_href, html)
-
-    return html
-
-# --- HOME PAGE ---
-@app.route('/')
-def home():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Proxy Server</title>
-        <style>
-            body { font-family: Arial, sans-serif; background: #f4f4f4; text-align: center; margin-top: 100px; }
-            input[type=text] { width: 300px; padding: 10px; }
-            button { padding: 10px 20px; background: #28a745; color: white; border: none; }
-            button:hover { background: #218838; }
-        </style>
-    </head>
-    <body>
-        <h2>Enter a URL to Proxy:</h2>
-        <form method="get" action="/proxy">
-            <input name="url" placeholder="https://tamilvip.bike/..." required>
-            <button type="submit">Go</button>
-        </form>
-    </body>
-    </html>
-    ''')
-
-# --- START SERVER ---
-if __name__ == "__main__":
-    app.run()
+if __name__ == '__main__':
+    app.run(threaded=True, port=5000)
