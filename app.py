@@ -3,9 +3,11 @@ import threading
 import select
 import os
 
+# Set up a default listen port or use environment variable (useful for Koyeb deployment)
 BUFFER_SIZE = 8192
-LISTEN_PORT = int(os.environ.get("PORT", 8080))  # Default for local use
+LISTEN_PORT = int(os.environ.get("PORT", 8080))  # Koyeb will set PORT
 
+# Function to handle the client's request
 def handle_client(client_socket):
     try:
         request_line = client_socket.recv(BUFFER_SIZE).decode()
@@ -15,6 +17,7 @@ def handle_client(client_socket):
 
         method, url, _ = request_line.split(' ', 2)
 
+        # Handling CONNECT method for HTTPS
         if method == 'CONNECT':
             host, port = url.split(':')
             port = int(port)
@@ -22,6 +25,7 @@ def handle_client(client_socket):
             client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             tunnel(client_socket, remote_socket)
         else:
+            # HTTP Request Handling
             protocol, rest = url.split("://", 1)
             host_port_path = rest.split("/", 1)
             host_port = host_port_path[0]
@@ -37,7 +41,7 @@ def handle_client(client_socket):
             remote_socket = socket.create_connection((host, port))
             remote_socket.sendall(f"{method} {path} HTTP/1.1\r\n".encode())
 
-            # Relay headers
+            # Relay remaining headers
             while True:
                 header_line = client_socket.recv(BUFFER_SIZE)
                 remote_socket.sendall(header_line)
@@ -54,6 +58,7 @@ def handle_client(client_socket):
             pass
         client_socket.close()
 
+# Tunnel data between client and remote server
 def tunnel(client, remote):
     sockets = [client, remote]
     while True:
@@ -66,6 +71,7 @@ def tunnel(client, remote):
                 return
             (remote if sock is client else client).sendall(data)
 
+# Start the proxy server
 def start_proxy():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(("0.0.0.0", LISTEN_PORT))
@@ -75,5 +81,6 @@ def start_proxy():
         client_socket, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(client_socket,), daemon=True).start()
 
+# Entry point
 if __name__ == "__main__":
     start_proxy()
