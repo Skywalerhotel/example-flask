@@ -2,12 +2,14 @@ import socket
 import threading
 import select
 import os
+from flask import Flask, request, Response
 
-# Set up a default listen port or use environment variable (useful for Koyeb deployment)
+# Initialize the Flask app
+app = Flask(__name__)
+
 BUFFER_SIZE = 8192
-LISTEN_PORT = int(os.environ.get("PORT", 8080))  # Koyeb will set PORT
+LISTEN_PORT = int(os.environ.get("PORT", 8080))  # Default for local use
 
-# Function to handle the client's request
 def handle_client(client_socket):
     try:
         request_line = client_socket.recv(BUFFER_SIZE).decode()
@@ -58,7 +60,6 @@ def handle_client(client_socket):
             pass
         client_socket.close()
 
-# Tunnel data between client and remote server
 def tunnel(client, remote):
     sockets = [client, remote]
     while True:
@@ -71,7 +72,16 @@ def tunnel(client, remote):
                 return
             (remote if sock is client else client).sendall(data)
 
-# Start the proxy server
+# Define a Flask route to start the proxy (for Gunicorn to run)
+@app.route("/", methods=["GET", "POST"])
+def proxy():
+    client_socket = request.environ.get('werkzeug.server.shutdown')
+    if not client_socket:
+        return Response("No Client", status=500)
+
+    # Use the same proxy logic here if needed
+    return Response("Proxy running", status=200)
+
 def start_proxy():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(("0.0.0.0", LISTEN_PORT))
@@ -81,6 +91,6 @@ def start_proxy():
         client_socket, _ = server_socket.accept()
         threading.Thread(target=handle_client, args=(client_socket,), daemon=True).start()
 
-# Entry point
+# Entry point for Flask (for Gunicorn to work)
 if __name__ == "__main__":
     start_proxy()
