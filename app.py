@@ -97,40 +97,55 @@ VIDEO_PLAYER_HTML = """
     </div>
 
     <script>
-        const video = document.getElementById('myVideoPlayer');
-        const select = document.getElementById('audioTrackSelect');
-        const label = document.querySelector('label[for=audioTrackSelect]');
-        function populateAudioTracks() {
-            select.innerHTML = '';
-            if (video.audioTracks && video.audioTracks.length > 0) {
-                for (let i = 0; i < video.audioTracks.length; i++) {
-                    const t = video.audioTracks[i];
-                    const opt = document.createElement('option');
-                    opt.value = t.id || i;
-                    opt.textContent = t.label || `Track ${i+1}`;
-                    if (t.enabled) opt.selected = true;
-                    select.appendChild(opt);
-                }
-                if (video.audioTracks.length <= 1) {
-                    select.style.display = 'none';
-                    if (label) label.style.display = 'none';
+        document.addEventListener('DOMContentLoaded', () => {
+            const video = document.getElementById('myVideoPlayer');
+            const audioTrackSelect = document.getElementById('audioTrackSelect');
+            const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+
+            function populateAudioTracks() {
+                audioTrackSelect.innerHTML = '';
+                if (video.audioTracks && video.audioTracks.length > 0) {
+                    for (let i = 0; i < video.audioTracks.length; i++) {
+                        const track = video.audioTracks[i];
+                        const option = document.createElement('option');
+                        option.value = track.id || i;
+                        option.textContent = track.label || `Track ${i + 1}` + (track.language ? ` (${track.language})` : '');
+                        if (track.enabled) option.selected = true;
+                        audioTrackSelect.appendChild(option);
+                    }
+                    if (video.audioTracks.length <= 1) {
+                        audioTrackSelect.style.display = 'none';
+                        if (audioTrackLabel) audioTrackLabel.style.display = 'none';
+                    } else {
+                        audioTrackSelect.style.display = 'inline-block';
+                        if (audioTrackLabel) audioTrackLabel.style.display = 'inline-block';
+                    }
                 } else {
-                    select.style.display = 'inline-block';
-                    if (label) label.style.display = 'inline-block';
+                    audioTrackSelect.style.display = 'none';
+                    if (audioTrackLabel) audioTrackLabel.style.display = 'none';
                 }
-            } else {
-                select.style.display = 'none';
-                if (label) label.style.display = 'none';
             }
-        }
-        video.addEventListener('loadedmetadata', populateAudioTracks);
-        if (video.readyState >= 1) populateAudioTracks();
+
+            video.addEventListener('loadedmetadata', populateAudioTracks);
+            if (video.audioTracks) {
+                video.audioTracks.addEventListener('change', populateAudioTracks);
+                video.audioTracks.addEventListener('addtrack', populateAudioTracks);
+            }
+
+            audioTrackSelect.addEventListener('change', () => {
+                const selectedValue = audioTrackSelect.value;
+                for (let i = 0; i < video.audioTracks.length; i++) {
+                    const track = video.audioTracks[i];
+                    track.enabled = (track.id === selectedValue || i.toString() === selectedValue);
+                }
+            });
+
+            if (video.readyState >= 1) populateAudioTracks();
+        });
     </script>
 </body>
 </html>
 """
-
-# ------------------ Flask Routes ------------------
 
 @app.route('/')
 def home():
@@ -150,7 +165,7 @@ def show_player():
 def stream_video():
     encoded_video_url = request.args.get('url')
     if not encoded_video_url:
-        return "Error: Missing video URL parameter.", 400
+        return "Error: Missing video URL parameter for streaming.", 400
 
     try:
         video_url = urllib.parse.unquote(encoded_video_url)
@@ -161,38 +176,35 @@ def stream_video():
     headers = {'Range': range_header} if range_header else {}
 
     try:
-        upstream = requests.get(video_url, headers=headers, stream=True, timeout=(5, 10))
-        if upstream.status_code not in [200, 206]:
-            upstream.raise_for_status()
+        upstream_response = requests.get(video_url, headers=headers, stream=True, timeout=(5, 30))
+        if upstream_response.status_code not in [200, 206]:
+            upstream_response.raise_for_status()
     except requests.exceptions.RequestException as e:
         return f"Error fetching upstream video: {e}", 502
 
-    resp_headers = {
-        k: v for k, v in upstream.headers.items()
+    response_headers = {
+        k: v for k, v in upstream_response.headers.items()
         if k in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']
     }
-    if 'Accept-Ranges' not in resp_headers and upstream.status_code == 206:
-        resp_headers['Accept-Ranges'] = 'bytes'
+    if 'Accept-Ranges' not in response_headers and upstream_response.status_code == 206:
+        response_headers['Accept-Ranges'] = 'bytes'
 
     @stream_with_context
-    def generate():
+    def generate_stream():
         try:
-            for chunk in upstream.iter_content(chunk_size=65536):
+            for chunk in upstream_response.iter_content(chunk_size=65536):
                 if not chunk:
                     continue
                 yield chunk
         except GeneratorExit:
-            print("Client disconnected (seek/new request) — closing stream.")
+            print("Client disconnected — stopping stream.")
         except Exception as e:
             print(f"Stream error: {e}")
         finally:
-            try:
-                upstream.close()
-            except Exception:
-                pass
+            upstream_response.close()
             print("Upstream closed.")
 
-    return Response(generate(), status=upstream.status_code, headers=resp_headers)
+    return Response(generate_stream(), status=upstream_response.status_code, headers=response_headers)
 
 
 if __name__ == "__main__":
