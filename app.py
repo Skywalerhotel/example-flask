@@ -1,12 +1,12 @@
 from flask import Flask, request, Response, render_template_string, stream_with_context, url_for
 import requests
 import urllib.parse
+import os
 
 app = Flask(__name__)
 
 # ------------------ HTML Templates ------------------
 
-# Home Page
 HOME_HTML = """
 <!doctype html>
 <html lang="en">
@@ -47,7 +47,6 @@ HOME_HTML = """
 </html>
 """
 
-# Video Player Page
 VIDEO_PLAYER_HTML = """
 <!doctype html>
 <html lang="en">
@@ -148,8 +147,6 @@ VIDEO_PLAYER_HTML = """
 </html>
 """
 
-# ------------------ Flask Routes ------------------
-
 @app.route('/')
 def home():
     return render_template_string(HOME_HTML)
@@ -160,7 +157,6 @@ def show_player():
     original_video_url = request.args.get('url')
     if not original_video_url:
         return "Error: No URL provided.", 400
-
     video_url_encoded = urllib.parse.quote(original_video_url)
     return render_template_string(VIDEO_PLAYER_HTML, video_url_encoded=video_url_encoded)
 
@@ -186,7 +182,6 @@ def stream_video():
     except requests.exceptions.RequestException as e:
         return f"Error fetching upstream video: {e}", 502
 
-    # Pass essential headers
     response_headers = {
         k: v for k, v in upstream_response.headers.items()
         if k in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']
@@ -197,173 +192,21 @@ def stream_video():
     @stream_with_context
     def generate_stream():
         try:
-            for chunk in upstream_response.iter_content(chunk_size=65536):  # 64KB chunks
+            for chunk in upstream_response.iter_content(chunk_size=65536):
                 if not chunk:
                     continue
                 yield chunk
         except GeneratorExit:
-            print("Client disconnected — stopping stream cleanly.")
-        except requests.exceptions.ChunkedEncodingError:
-            print("Warning: Upstream connection closed unexpectedly.")
+            print("Client disconnected — stopping stream.")
         except Exception as e:
-            print(f"Streaming error: {e}")
+            print(f"Stream error: {e}")
         finally:
-            try:
-                upstream_response.close()
-            except Exception:
-                pass
-            print("Upstream connection closed.")
+            upstream_response.close()
+            print("Upstream closed.")
 
     return Response(generate_stream(), status=upstream_response.status_code, headers=response_headers)
 
 
-# ------------------ Run Flask ------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True, debug=True)
-                    if(video.audioTracks.length <= 1){
-                        audioTrackSelect.style.display = 'none';
-                        if (audioTrackLabel) audioTrackLabel.style.display = 'none';
-                    } else {
-                        audioTrackSelect.style.display = 'inline-block';
-                        if (audioTrackLabel) audioTrackLabel.style.display = 'inline-block';
-                    }
-                } else {
-                    console.warn("audioTracks API not supported or no tracks found initially.");
-                    audioTrackSelect.style.display = 'none';
-                    if (audioTrackLabel) audioTrackLabel.style.display = 'none';
-                }
-            }
-
-            video.addEventListener('loadedmetadata', () => {
-                console.log("Video metadata loaded.");
-                populateAudioTracks();
-            });
-
-            if (video.audioTracks) {
-                video.audioTracks.addEventListener('change', () => {
-                    console.log("Audio tracks changed.");
-                    populateAudioTracks();
-                });
-                 video.audioTracks.addEventListener('addtrack', () => { // Also listen for addtrack
-                    console.log("Audio track added.");
-                    populateAudioTracks();
-                });
-            }
-
-
-            audioTrackSelect.addEventListener('change', () => {
-                const selectedValue = audioTrackSelect.value;
-                console.log(`Attempting to switch to audio track value: ${selectedValue}`);
-                let trackSwitched = false;
-                for (let i = 0; i < video.audioTracks.length; i++) {
-                    const track = video.audioTracks[i];
-                    // Match by id (if string) or index (if number from parsed value)
-                    if (track.id === selectedValue || i.toString() === selectedValue) {
-                        track.enabled = true;
-                        console.log(`Enabled track: ${track.label || 'Track ' + (i+1)} (ID: ${track.id}, Index: ${i})`);
-                        trackSwitched = true;
-                    } else {
-                        track.enabled = false;
-                    }
-                }
-                if (!trackSwitched) {
-                    console.warn("Could not find matching track to enable for value: ", selectedValue);
-                }
-            });
-
-            if (video.readyState >= 1) { // HAVE_METADATA
-                 console.log("Video readyState >= HAVE_METADATA on DOMContentLoaded. Populating tracks.");
-                 populateAudioTracks();
-            }
-        });
-    </script>
-</body>
-</html>
-"""
-
-
-# --- Flask Routes ---
-
-@app.route('/')
-def home():
-    """Serves the simple HTML form."""
-    return render_template_string(HOME_HTML)
-
-@app.route('/player') # Changed route name for clarity
-def show_player():
-    """Renders the HTML page with the video player."""
-    original_video_url = request.args.get('url')
-    if not original_video_url:
-        return "Error: No URL provided.", 400
-
-    video_url_encoded = urllib.parse.quote(original_video_url)
-    return render_template_string(VIDEO_PLAYER_HTML, video_url_encoded=video_url_encoded)
-
-@app.route('/stream') # New route specifically for streaming video data
-def stream_video():
-    """Proxies the video stream, handling Range requests for seeking."""
-    encoded_video_url = request.args.get('url')
-    if not encoded_video_url:
-        return "Error: Missing video URL parameter for streaming.", 400
-
-    try:
-        video_url = urllib.parse.unquote(encoded_video_url)
-    except Exception as e:
-        return f"Error decoding URL parameter: {e}", 400
-
-    range_header = request.headers.get('Range', None)
-    request_headers = {}
-    if range_header:
-        request_headers['Range'] = range_header
-        print(f"Client requested Range: {range_header}")
-
-    try:
-        upstream_response = requests.get(
-            video_url,
-            headers=request_headers,
-            stream=True,
-            timeout=30
-        )
-        if not upstream_response.ok and upstream_response.status_code not in [200, 206]:
-            upstream_response.raise_for_status()
-
-    except requests.exceptions.Timeout:
-        error_message = "Error: Upstream server timed out."
-        print(error_message)
-        return error_message, 504
-    except requests.exceptions.RequestException as e:
-        error_message = f"Error fetching upstream URL '{video_url}': {e}"
-        print(error_message)
-        return error_message, 502
-
-    response_headers = {}
-    for header_key in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']:
-        if header_key in upstream_response.headers:
-            response_headers[header_key] = upstream_response.headers[header_key]
-
-    if 'Accept-Ranges' not in response_headers and 'bytes' in upstream_response.headers.get('Accept-Ranges', ''):
-        response_headers['Accept-Ranges'] = 'bytes'
-    elif upstream_response.status_code == 206 and 'Accept-Ranges' not in response_headers:
-        response_headers['Accept-Ranges'] = 'bytes'
-
-    @stream_with_context
-    def generate_stream():
-        try:
-            for chunk in upstream_response.iter_content(chunk_size=16384):
-                if chunk:
-                    yield chunk
-            print("Stream finished.")
-        except requests.exceptions.ChunkedEncodingError:
-            print("Warning: Upstream connection closed unexpectedly during streaming.")
-        except Exception as e:
-            print(f"Error during streaming generation: {e}")
-        finally:
-            upstream_response.close()
-            print("Upstream connection closed.")
-
-    status_code = upstream_response.status_code
-    print(f"Streaming to client - Status: {status_code}, Headers: {list(response_headers.keys())}")
-    return Response(generate_stream(), status=status_code, headers=response_headers)
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, threaded=True, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
