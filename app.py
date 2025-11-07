@@ -1,11 +1,9 @@
 from flask import Flask, request, Response, render_template_string, stream_with_context, url_for
-import requests
-import urllib.parse
-import os
+import requests, urllib.parse
 
 app = Flask(__name__)
 
-# ------------------ HTML Templates ------------------
+# --- HTML Templates ---
 
 HOME_HTML = """
 <!doctype html>
@@ -17,23 +15,12 @@ HOME_HTML = """
     <style>
         body { font-family: sans-serif; margin: 2em; background-color: #f4f4f4; }
         h2 { color: #333; }
-        form { background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input[type=text] {
-            width: calc(100% - 100px);
-            max-width: 500px;
-            padding: 10px;
-            margin-right: 10px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-        }
-        input[type=submit] {
-            padding: 10px 15px;
-            background-color: #5cb85c;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
+        form { background-color: #fff; padding: 20px; border-radius: 5px;
+               box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input[type=text] { width: calc(100% - 100px); max-width: 500px; padding: 10px;
+                           margin-right: 10px; border: 1px solid #ccc; border-radius: 3px; }
+        input[type=submit] { padding: 10px 15px; background-color: #5cb85c;
+                             color: white; border: none; border-radius: 3px; cursor: pointer; }
         input[type=submit]:hover { background-color: #4cae4c; }
     </style>
 </head>
@@ -55,158 +42,139 @@ VIDEO_PLAYER_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Playing Video</title>
     <style>
-        body {
-            margin: 0;
-            background-color: #000;
-            color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        video {
-            width: 100%;
-            max-height: 90vh;
-            display: block;
-            background-color: #000;
-        }
-        .controls {
-            padding: 10px;
-            background-color: #222;
-            width: 100%;
-            text-align: center;
-            box-sizing: border-box;
-        }
+        body { margin: 0; background-color: #000; color: #fff;
+               display: flex; flex-direction: column; align-items: center; }
+        video { width: 100%; max-height: 90vh; display: block; }
+        .controls { padding: 10px; background-color: #222; width: 100%;
+                    text-align: center; box-sizing: border-box; }
         .controls label { margin-right: 10px; }
-        .controls select {
-            padding: 5px;
-            border-radius: 3px;
-            background-color: #333;
-            color: #fff;
-            border: 1px solid #555;
-        }
+        .controls select { padding: 5px; border-radius: 3px; background-color: #333;
+                           color: #fff; border: 1px solid #555; }
     </style>
 </head>
 <body>
     <video controls autoplay preload="auto" id="myVideoPlayer"
-        src="{{ url_for('stream_video', url=video_url_encoded) }}">
+           src="{{ url_for('stream_video', url=video_url_encoded) }}">
         Your browser does not support the video tag.
     </video>
+
     <div class="controls">
         <label for="audioTrackSelect">Audio Track:</label>
         <select id="audioTrackSelect" title="Select Audio Track"></select>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const video = document.getElementById('myVideoPlayer');
-            const audioTrackSelect = document.getElementById('audioTrackSelect');
-            const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+    let controller = null;
+    const video = document.getElementById('myVideoPlayer');
 
-            function populateAudioTracks() {
-                audioTrackSelect.innerHTML = '';
-                if (video.audioTracks && video.audioTracks.length > 0) {
-                    for (let i = 0; i < video.audioTracks.length; i++) {
-                        const track = video.audioTracks[i];
-                        const option = document.createElement('option');
-                        option.value = track.id || i;
-                        option.textContent = track.label || `Track ${i + 1}` + (track.language ? ` (${track.language})` : '');
-                        if (track.enabled) option.selected = true;
-                        audioTrackSelect.appendChild(option);
-                    }
-                    if (video.audioTracks.length <= 1) {
-                        audioTrackSelect.style.display = 'none';
-                        if (audioTrackLabel) audioTrackLabel.style.display = 'none';
-                    } else {
-                        audioTrackSelect.style.display = 'inline-block';
-                        if (audioTrackLabel) audioTrackLabel.style.display = 'inline-block';
-                    }
-                } else {
-                    audioTrackSelect.style.display = 'none';
-                    if (audioTrackLabel) audioTrackLabel.style.display = 'none';
-                }
+    // Abort active stream when seeking
+    video.addEventListener('seeking', () => {
+        if (controller) controller.abort();
+        console.log("Seek detected — aborting old stream.");
+    });
+
+    // Abort when playing new range
+    video.addEventListener('play', () => {
+        if (controller) controller.abort();
+    });
+
+    // Audio track population (optional)
+    const audioTrackSelect = document.getElementById('audioTrackSelect');
+    const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+
+    function populateAudioTracks() {
+        audioTrackSelect.innerHTML = '';
+        if (video.audioTracks && video.audioTracks.length > 0) {
+            for (let i = 0; i < video.audioTracks.length; i++) {
+                const track = video.audioTracks[i];
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = track.label || `Track ${i + 1}`;
+                if (track.enabled) opt.selected = true;
+                audioTrackSelect.appendChild(opt);
             }
+            audioTrackSelect.style.display = video.audioTracks.length > 1 ? 'inline-block' : 'none';
+            if (audioTrackLabel) audioTrackLabel.style.display = video.audioTracks.length > 1 ? 'inline-block' : 'none';
+        } else {
+            audioTrackSelect.style.display = 'none';
+            if (audioTrackLabel) audioTrackLabel.style.display = 'none';
+        }
+    }
 
-            video.addEventListener('loadedmetadata', populateAudioTracks);
-            if (video.audioTracks) {
-                video.audioTracks.addEventListener('change', populateAudioTracks);
-                video.audioTracks.addEventListener('addtrack', populateAudioTracks);
-            }
-
-            audioTrackSelect.addEventListener('change', () => {
-                const selectedValue = audioTrackSelect.value;
-                for (let i = 0; i < video.audioTracks.length; i++) {
-                    const track = video.audioTracks[i];
-                    track.enabled = (track.id === selectedValue || i.toString() === selectedValue);
-                }
-            });
-
-            if (video.readyState >= 1) populateAudioTracks();
-        });
+    video.addEventListener('loadedmetadata', populateAudioTracks);
     </script>
 </body>
 </html>
 """
 
+# --- Flask Routes ---
+
 @app.route('/')
 def home():
     return render_template_string(HOME_HTML)
 
-
 @app.route('/player')
 def show_player():
-    original_video_url = request.args.get('url')
-    if not original_video_url:
+    url = request.args.get('url')
+    if not url:
         return "Error: No URL provided.", 400
-    video_url_encoded = urllib.parse.quote(original_video_url)
-    return render_template_string(VIDEO_PLAYER_HTML, video_url_encoded=video_url_encoded)
-
+    encoded = urllib.parse.quote(url)
+    return render_template_string(VIDEO_PLAYER_HTML, video_url_encoded=encoded)
 
 @app.route('/stream')
 def stream_video():
-    encoded_video_url = request.args.get('url')
-    if not encoded_video_url:
-        return "Error: Missing video URL parameter for streaming.", 400
+    encoded = request.args.get('url')
+    if not encoded:
+        return "Error: Missing video URL.", 400
 
     try:
-        video_url = urllib.parse.unquote(encoded_video_url)
+        video_url = urllib.parse.unquote(encoded)
     except Exception as e:
-        return f"Error decoding URL parameter: {e}", 400
+        return f"Error decoding URL: {e}", 400
 
     range_header = request.headers.get('Range')
-    headers = {'Range': range_header} if range_header else {}
+    headers = {
+        'Connection': 'close',
+        'User-Agent': 'Mozilla/5.0 (compatible; StreamProxy/1.0)',
+    }
+    if range_header:
+        headers['Range'] = range_header
 
     try:
-        upstream_response = requests.get(video_url, headers=headers, stream=True, timeout=(5, 30))
-        if upstream_response.status_code not in [200, 206]:
-            upstream_response.raise_for_status()
+        upstream = requests.get(
+            video_url,
+            headers=headers,
+            stream=True,
+            timeout=(3, 8)
+        )
+    except requests.exceptions.Timeout:
+        return "Upstream timeout", 504
     except requests.exceptions.RequestException as e:
-        return f"Error fetching upstream video: {e}", 502
+        return f"Error fetching video: {e}", 502
 
-    response_headers = {
-        k: v for k, v in upstream_response.headers.items()
-        if k in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range', 'ETag', 'Last-Modified']
-    }
-    if 'Accept-Ranges' not in response_headers and upstream_response.status_code == 206:
+    response_headers = {}
+    for h in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range']:
+        if h in upstream.headers:
+            response_headers[h] = upstream.headers[h]
+    if 'Accept-Ranges' not in response_headers:
         response_headers['Accept-Ranges'] = 'bytes'
 
     @stream_with_context
-    def generate_stream():
+    def generate():
         try:
-            for chunk in upstream_response.iter_content(chunk_size=65536):
-                if not chunk:
-                    continue
-                yield chunk
+            for chunk in upstream.iter_content(chunk_size=32768):
+                if chunk:
+                    yield chunk
         except GeneratorExit:
-            print("Client disconnected — stopping stream.")
+            print("Client disconnected (seek or stop).")
         except Exception as e:
             print(f"Stream error: {e}")
         finally:
-            upstream_response.close()
-            print("Upstream closed.")
+            upstream.close()
+            print("Upstream connection closed.")
 
-    return Response(generate_stream(), status=upstream_response.status_code, headers=response_headers)
-
+    return Response(generate(), status=upstream.status_code, headers=response_headers)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    # For Koyeb or Render deployment
+    app.run(host="0.0.0.0", port=5000, threaded=True)
