@@ -38,71 +38,206 @@ VIDEO_PLAYER_HTML = """
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Playing Video</title>
-    <style>
-        body { margin: 0; background-color: #000; color: #fff;
-               display: flex; flex-direction: column; align-items: center; }
-        video { width: 100%; max-height: 90vh; display: block; }
-        .controls { padding: 10px; background-color: #222; width: 100%;
-                    text-align: center; box-sizing: border-box; }
-        .controls label { margin-right: 10px; }
-        .controls select { padding: 5px; border-radius: 3px; background-color: #333;
-                           color: #fff; border: 1px solid #555; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playing Video</title>
+
+<style>
+body {
+    margin: 0;
+    background-color: #000;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: Arial;
+}
+
+.video-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+video {
+    width: 100%;
+    max-height: 90vh;
+    display: block;
+}
+
+/* Buffer Spinner */
+.loader {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    border: 6px solid rgba(255,255,255,0.2);
+    border-top: 6px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: none;
+}
+
+@keyframes spin {
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Double tap indicator */
+.seek-indicator {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 40px;
+    color: white;
+    opacity: 0;
+    transition: 0.3s;
+    pointer-events: none;
+}
+
+.seek-left { left: 20%; }
+.seek-right { right: 20%; }
+
+.show {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.3);
+}
+
+.controls {
+    padding: 10px;
+    background-color: #222;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.controls label { margin-right: 10px; }
+
+.controls select {
+    padding: 5px;
+    border-radius: 3px;
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+}
+</style>
 </head>
+
 <body>
+
+<div class="video-wrapper" id="videoWrapper">
+
     <video controls autoplay preload="auto" id="myVideoPlayer"
-           src="{{ url_for('stream_video', url=video_url_encoded) }}">
+        src="{{ url_for('stream_video', url=video_url_encoded) }}">
         Your browser does not support the video tag.
     </video>
 
-    <div class="controls">
-        <label for="audioTrackSelect">Audio Track:</label>
-        <select id="audioTrackSelect" title="Select Audio Track"></select>
-    </div>
+    <div class="loader" id="loader"></div>
 
-    <script>
-    let controller = null;
-    const video = document.getElementById('myVideoPlayer');
+    <div class="seek-indicator seek-left" id="seekLeft">⏪ 10s</div>
+    <div class="seek-indicator seek-right" id="seekRight">10s ⏩</div>
 
-    // Abort active stream when seeking
-    video.addEventListener('seeking', () => {
-        if (controller) controller.abort();
-        console.log("Seek detected — aborting old stream.");
-    });
+</div>
 
-    // Abort when playing new range
-    video.addEventListener('play', () => {
-        if (controller) controller.abort();
-    });
+<div class="controls">
+    <label for="audioTrackSelect">Audio Track:</label>
+    <select id="audioTrackSelect" title="Select Audio Track"></select>
+</div>
 
-    // Audio track population (optional)
-    const audioTrackSelect = document.getElementById('audioTrackSelect');
-    const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+<script>
+let controller = null;
+const video = document.getElementById('myVideoPlayer');
+const wrapper = document.getElementById('videoWrapper');
+const loader = document.getElementById('loader');
+const seekLeft = document.getElementById('seekLeft');
+const seekRight = document.getElementById('seekRight');
 
-    function populateAudioTracks() {
-        audioTrackSelect.innerHTML = '';
-        if (video.audioTracks && video.audioTracks.length > 0) {
-            for (let i = 0; i < video.audioTracks.length; i++) {
-                const track = video.audioTracks[i];
-                const opt = document.createElement('option');
-                opt.value = i;
-                opt.textContent = track.label || `Track ${i + 1}`;
-                if (track.enabled) opt.selected = true;
-                audioTrackSelect.appendChild(opt);
-            }
-            audioTrackSelect.style.display = video.audioTracks.length > 1 ? 'inline-block' : 'none';
-            if (audioTrackLabel) audioTrackLabel.style.display = video.audioTracks.length > 1 ? 'inline-block' : 'none';
+let lastTap = 0;
+
+/* STREAM ABORT LOGIC */
+video.addEventListener('seeking', () => {
+    if (controller) controller.abort();
+    console.log("Seek detected — aborting old stream.");
+});
+
+video.addEventListener('play', () => {
+    if (controller) controller.abort();
+});
+
+/* BUFFER EVENTS */
+video.addEventListener("waiting", () => loader.style.display = "block");
+video.addEventListener("playing", () => loader.style.display = "none");
+
+/* DOUBLE TAP SEEK 10s */
+wrapper.addEventListener("click", function(e) {
+    let now = new Date().getTime();
+    let tapLength = now - lastTap;
+
+    if (tapLength < 300 && tapLength > 0) {
+        const rect = wrapper.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        loader.style.display = "block";
+
+        if (x < rect.width / 2) {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            showIndicator(seekLeft);
         } else {
-            audioTrackSelect.style.display = 'none';
-            if (audioTrackLabel) audioTrackLabel.style.display = 'none';
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            showIndicator(seekRight);
         }
+
+        video.play();
     }
 
-    video.addEventListener('loadedmetadata', populateAudioTracks);
-    </script>
+    lastTap = now;
+});
+
+function showIndicator(el) {
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 400);
+}
+
+/* AUDIO TRACK HANDLING */
+const audioTrackSelect = document.getElementById('audioTrackSelect');
+const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+
+function populateAudioTracks() {
+    audioTrackSelect.innerHTML = '';
+    if (video.audioTracks && video.audioTracks.length > 0) {
+        for (let i = 0; i < video.audioTracks.length; i++) {
+            const track = video.audioTracks[i];
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = track.label || `Track ${i + 1}`;
+            if (track.enabled) opt.selected = true;
+            audioTrackSelect.appendChild(opt);
+        }
+
+        audioTrackSelect.style.display =
+            video.audioTracks.length > 1 ? 'inline-block' : 'none';
+
+        if (audioTrackLabel)
+            audioTrackLabel.style.display =
+                video.audioTracks.length > 1 ? 'inline-block' : 'none';
+
+    } else {
+        audioTrackSelect.style.display = 'none';
+        if (audioTrackLabel) audioTrackLabel.style.display = 'none';
+    }
+}
+
+audioTrackSelect.addEventListener('change', () => {
+    const selected = parseInt(audioTrackSelect.value);
+    for (let i = 0; i < video.audioTracks.length; i++) {
+        video.audioTracks[i].enabled = (i === selected);
+    }
+});
+
+video.addEventListener('loadedmetadata', populateAudioTracks);
+
+</script>
+
 </body>
 </html>
 """
