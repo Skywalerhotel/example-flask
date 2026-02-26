@@ -173,7 +173,9 @@ input[type=range]{
 <body>
 
 <div class="player" id="player">
-    <video id="video" src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+    <video id="video"
+        src="{{ url_for('stream_video', url=video_url_encoded) }}"
+        autoplay preload="auto"></video>
 
     <div class="loader" id="loader"></div>
 
@@ -227,7 +229,7 @@ const currentTime = document.getElementById("currentTime");
 const duration = document.getElementById("duration");
 
 let lastTap = 0;
-let tapCount = 0;
+let tapCount = 10;
 let hideTimeout;
 
 /* PLAY */
@@ -240,7 +242,7 @@ playPause.onclick=()=>{
 video.onwaiting=()=> loader.style.display="block";
 video.onplaying=()=> loader.style.display="none";
 
-/* TIME UPDATE */
+/* TIME */
 video.ontimeupdate=()=>{
     const percent=(video.currentTime/video.duration)*100;
     progressFilled.style.width=percent+"%";
@@ -263,14 +265,14 @@ video.onprogress=()=>{
     }
 };
 
-/* SEEK */
+/* SEEK BAR */
 progress.onclick=(e)=>{
     const rect=progress.getBoundingClientRect();
     const x=e.clientX-rect.left;
     video.currentTime=(x/rect.width)*video.duration;
 };
 
-/* DOUBLE TAP STACK */
+/* DOUBLE TAP 10s STACK */
 player.onclick=(e)=>{
     let now=Date.now();
     if(now-lastTap<300){
@@ -337,12 +339,11 @@ function resetHide(){
 }
 player.onmousemove=resetHide;
 video.onplay=resetHide;
-
 </script>
+
 </body>
 </html>
 """
-
 # --- Flask Routes ---
 
 @app.route('/')
