@@ -35,209 +35,310 @@ HOME_HTML = """
 """
 
 VIDEO_PLAYER_HTML = """
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Playing Video</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Video Player</title>
 
 <style>
-body {
-    margin: 0;
-    background-color: #000;
-    color: #fff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-family: Arial;
+body{
+    margin:0;
+    background:#0f172a;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    font-family:Arial;
 }
 
-.video-wrapper {
-    position: relative;
-    width: 100%;
+.player{
+    width:95%;
+    max-width:900px;
+    background:#000;
+    position:relative;
+    border-radius:12px;
+    overflow:hidden;
+    cursor:pointer;
 }
 
-video {
-    width: 100%;
-    max-height: 90vh;
-    display: block;
+video{
+    width:100%;
+    display:block;
 }
 
-/* Buffer Spinner */
-.loader {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60px;
-    height: 60px;
-    border: 6px solid rgba(255,255,255,0.2);
-    border-top: 6px solid #fff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    display: none;
+/* Loader */
+.loader{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    width:60px;
+    height:60px;
+    border:6px solid rgba(255,255,255,0.2);
+    border-top:6px solid #fff;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+    display:none;
+}
+@keyframes spin{
+    100%{ transform:translate(-50%,-50%) rotate(360deg); }
 }
 
-@keyframes spin {
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
+/* Seek Indicator */
+.seek-indicator{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    font-size:40px;
+    color:white;
+    opacity:0;
+    transition:0.3s;
+}
+.seek-left{ left:20%; }
+.seek-right{ right:20%; }
+.show{
+    opacity:1;
+    transform:translateY(-50%) scale(1.2);
 }
 
-/* Double tap indicator */
-.seek-indicator {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 40px;
-    color: white;
-    opacity: 0;
-    transition: 0.3s;
-    pointer-events: none;
+/* Controls */
+.controls{
+    position:absolute;
+    bottom:0;
+    width:100%;
+    background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
+    padding:10px;
+    box-sizing:border-box;
+    transition:0.3s;
 }
 
-.seek-left { left: 20%; }
-.seek-right { right: 20%; }
-
-.show {
-    opacity: 1;
-    transform: translateY(-50%) scale(1.3);
+.hide-controls{
+    opacity:0;
 }
 
-.controls {
-    padding: 10px;
-    background-color: #222;
-    width: 100%;
-    text-align: center;
-    box-sizing: border-box;
+.progress{
+    width:100%;
+    height:6px;
+    background:#333;
+    border-radius:5px;
+    cursor:pointer;
+    position:relative;
+    margin-bottom:8px;
 }
 
-.controls label { margin-right: 10px; }
-
-.controls select {
-    padding: 5px;
-    border-radius: 3px;
-    background-color: #333;
-    color: #fff;
-    border: 1px solid #555;
+.buffered{
+    position:absolute;
+    height:100%;
+    background:#666;
+    width:0%;
+    border-radius:5px;
 }
+
+.progress-filled{
+    position:absolute;
+    height:100%;
+    width:0%;
+    background:#ff0000;
+    border-radius:5px;
+}
+
+.control-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.left, .right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+button, select{
+    background:none;
+    border:none;
+    color:white;
+    font-size:16px;
+    cursor:pointer;
+}
+
+input[type=range]{
+    cursor:pointer;
+}
+.time{ font-size:14px; }
 </style>
 </head>
-
 <body>
 
-<div class="video-wrapper" id="videoWrapper">
-
-    <video controls autoplay preload="auto" id="myVideoPlayer"
-        src="{{ url_for('stream_video', url=video_url_encoded) }}">
-        Your browser does not support the video tag.
-    </video>
+<div class="player" id="player">
+    <video id="video" src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
 
     <div class="loader" id="loader"></div>
 
-    <div class="seek-indicator seek-left" id="seekLeft">⏪ 10s</div>
-    <div class="seek-indicator seek-right" id="seekRight">10s ⏩</div>
+    <div class="seek-indicator seek-left" id="seekLeft">⏪ <span id="leftCount">10</span>s</div>
+    <div class="seek-indicator seek-right" id="seekRight"><span id="rightCount">10</span>s ⏩</div>
 
-</div>
+    <div class="controls" id="controls">
+        <div class="progress" id="progress">
+            <div class="buffered" id="buffered"></div>
+            <div class="progress-filled" id="progressFilled"></div>
+        </div>
 
-<div class="controls">
-    <label for="audioTrackSelect">Audio Track:</label>
-    <select id="audioTrackSelect" title="Select Audio Track"></select>
+        <div class="control-row">
+            <div class="left">
+                <button id="playPause">▶</button>
+                <button id="mute">🔊</button>
+                <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
+                <span class="time" id="currentTime">0:00</span> /
+                <span class="time" id="duration">0:00</span>
+            </div>
+
+            <div class="right">
+                <select id="speed">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                </select>
+                <button id="pip">📺</button>
+                <button id="fullscreen">⛶</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
-let controller = null;
-const video = document.getElementById('myVideoPlayer');
-const wrapper = document.getElementById('videoWrapper');
-const loader = document.getElementById('loader');
-const seekLeft = document.getElementById('seekLeft');
-const seekRight = document.getElementById('seekRight');
+const video = document.getElementById("video");
+const player = document.getElementById("player");
+const controls = document.getElementById("controls");
+const loader = document.getElementById("loader");
+const progress = document.getElementById("progress");
+const progressFilled = document.getElementById("progressFilled");
+const bufferedBar = document.getElementById("buffered");
+const playPause = document.getElementById("playPause");
+const mute = document.getElementById("mute");
+const volume = document.getElementById("volume");
+const speed = document.getElementById("speed");
+const fullscreen = document.getElementById("fullscreen");
+const pip = document.getElementById("pip");
+const currentTime = document.getElementById("currentTime");
+const duration = document.getElementById("duration");
 
 let lastTap = 0;
+let tapCount = 0;
+let hideTimeout;
 
-/* STREAM ABORT LOGIC */
-video.addEventListener('seeking', () => {
-    if (controller) controller.abort();
-    console.log("Seek detected — aborting old stream.");
-});
+/* PLAY */
+playPause.onclick=()=>{
+    if(video.paused){ video.play(); playPause.textContent="❚❚"; }
+    else{ video.pause(); playPause.textContent="▶"; }
+};
 
-video.addEventListener('play', () => {
-    if (controller) controller.abort();
-});
+/* BUFFER */
+video.onwaiting=()=> loader.style.display="block";
+video.onplaying=()=> loader.style.display="none";
 
-/* BUFFER EVENTS */
-video.addEventListener("waiting", () => loader.style.display = "block");
-video.addEventListener("playing", () => loader.style.display = "none");
+/* TIME UPDATE */
+video.ontimeupdate=()=>{
+    const percent=(video.currentTime/video.duration)*100;
+    progressFilled.style.width=percent+"%";
+    currentTime.textContent=format(video.currentTime);
+};
+video.onloadedmetadata=()=> duration.textContent=format(video.duration);
 
-/* DOUBLE TAP SEEK 10s */
-wrapper.addEventListener("click", function(e) {
-    let now = new Date().getTime();
-    let tapLength = now - lastTap;
+function format(t){
+    const m=Math.floor(t/60);
+    const s=Math.floor(t%60).toString().padStart(2,"0");
+    return m+":"+s;
+}
 
-    if (tapLength < 300 && tapLength > 0) {
-        const rect = wrapper.getBoundingClientRect();
-        const x = e.clientX - rect.left;
+/* BUFFERED BAR */
+video.onprogress=()=>{
+    if(video.buffered.length>0){
+        const bufferedEnd=video.buffered.end(video.buffered.length-1);
+        const percent=(bufferedEnd/video.duration)*100;
+        bufferedBar.style.width=percent+"%";
+    }
+};
 
-        loader.style.display = "block";
+/* SEEK */
+progress.onclick=(e)=>{
+    const rect=progress.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    video.currentTime=(x/rect.width)*video.duration;
+};
 
-        if (x < rect.width / 2) {
-            video.currentTime = Math.max(0, video.currentTime - 10);
-            showIndicator(seekLeft);
-        } else {
-            video.currentTime = Math.min(video.duration, video.currentTime + 10);
-            showIndicator(seekRight);
+/* DOUBLE TAP STACK */
+player.onclick=(e)=>{
+    let now=Date.now();
+    if(now-lastTap<300){
+        tapCount+=10;
+        const rect=player.getBoundingClientRect();
+        const x=e.clientX-rect.left;
+
+        if(x<rect.width/2){
+            video.currentTime=Math.max(0,video.currentTime-10);
+            document.getElementById("leftCount").textContent=tapCount;
+            show("seekLeft");
+        }else{
+            video.currentTime=Math.min(video.duration,video.currentTime+10);
+            document.getElementById("rightCount").textContent=tapCount;
+            show("seekRight");
         }
-
         video.play();
-    }
+    }else tapCount=10;
+    lastTap=now;
+};
 
-    lastTap = now;
-});
-
-function showIndicator(el) {
+function show(id){
+    const el=document.getElementById(id);
     el.classList.add("show");
-    setTimeout(() => el.classList.remove("show"), 400);
+    setTimeout(()=>el.classList.remove("show"),400);
 }
 
-/* AUDIO TRACK HANDLING */
-const audioTrackSelect = document.getElementById('audioTrackSelect');
-const audioTrackLabel = document.querySelector('label[for=audioTrackSelect]');
+/* VOLUME */
+volume.oninput=()=> video.volume=volume.value;
+mute.onclick=()=>{
+    video.muted=!video.muted;
+    mute.textContent=video.muted?"🔇":"🔊";
+};
 
-function populateAudioTracks() {
-    audioTrackSelect.innerHTML = '';
-    if (video.audioTracks && video.audioTracks.length > 0) {
-        for (let i = 0; i < video.audioTracks.length; i++) {
-            const track = video.audioTracks[i];
-            const opt = document.createElement('option');
-            opt.value = i;
-            opt.textContent = track.label || `Track ${i + 1}`;
-            if (track.enabled) opt.selected = true;
-            audioTrackSelect.appendChild(opt);
-        }
+/* SPEED */
+speed.onchange=()=> video.playbackRate=speed.value;
 
-        audioTrackSelect.style.display =
-            video.audioTracks.length > 1 ? 'inline-block' : 'none';
+/* FULLSCREEN */
+fullscreen.onclick=()=>{
+    if(!document.fullscreenElement) player.requestFullscreen();
+    else document.exitFullscreen();
+};
 
-        if (audioTrackLabel)
-            audioTrackLabel.style.display =
-                video.audioTracks.length > 1 ? 'inline-block' : 'none';
+/* PIP */
+pip.onclick=async()=>{
+    if(document.pictureInPictureElement)
+        document.exitPictureInPicture();
+    else
+        await video.requestPictureInPicture();
+};
 
-    } else {
-        audioTrackSelect.style.display = 'none';
-        if (audioTrackLabel) audioTrackLabel.style.display = 'none';
-    }
+/* KEYBOARD */
+document.onkeydown=(e)=>{
+    if(e.code==="Space"){ e.preventDefault(); playPause.click(); }
+    if(e.code==="ArrowRight") video.currentTime+=10;
+    if(e.code==="ArrowLeft") video.currentTime-=10;
+};
+
+/* AUTO HIDE */
+function resetHide(){
+    controls.classList.remove("hide-controls");
+    clearTimeout(hideTimeout);
+    hideTimeout=setTimeout(()=>controls.classList.add("hide-controls"),3000);
 }
-
-audioTrackSelect.addEventListener('change', () => {
-    const selected = parseInt(audioTrackSelect.value);
-    for (let i = 0; i < video.audioTracks.length; i++) {
-        video.audioTracks[i].enabled = (i === selected);
-    }
-});
-
-video.addEventListener('loadedmetadata', populateAudioTracks);
+player.onmousemove=resetHide;
+video.onplay=resetHide;
 
 </script>
-
 </body>
 </html>
 """
