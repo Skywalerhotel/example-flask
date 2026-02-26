@@ -34,7 +34,7 @@ HOME_HTML = """
 </html>
 """
 
-VIDEO_PLAYER_HTML = """ 
+VIDEO_PLAYER_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -44,11 +44,14 @@ VIDEO_PLAYER_HTML = """
 <style>
 body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial}
 .player{width:95%;max-width:900px;background:#000;position:relative;border-radius:12px;overflow:hidden;cursor:pointer}
-video{width:100%;display:block}
+video{width:100%;display:block;object-fit:contain}
+/* Loader */
 .loader{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;border:6px solid rgba(255,255,255,0.2);border-top:6px solid #fff;border-radius:50%;animation:spin 1s linear infinite;display:none}
 @keyframes spin{100%{transform:translate(-50%,-50%) rotate(360deg)}}
+/* Seek Indicator */
 .seek-indicator{position:absolute;top:50%;transform:translateY(-50%);font-size:40px;color:white;opacity:0;transition:0.3s}
 .seek-left{left:20%}.seek-right{right:20%}.show{opacity:1;transform:translateY(-50%) scale(1.2)}
+/* Controls */
 .controls{position:absolute;bottom:0;width:100%;background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);padding:10px;box-sizing:border-box;transition:0.3s}
 .hide-controls{opacity:0}
 .progress{width:100%;height:6px;background:#333;border-radius:5px;cursor:pointer;position:relative;margin-bottom:8px}
@@ -59,6 +62,13 @@ video{width:100%;display:block}
 button,select{background:none;border:none;color:white;font-size:16px;cursor:pointer}
 input[type=range]{cursor:pointer}
 .time{font-size:14px}
+
+/* Fullscreen adjustments */
+.player:-webkit-full-screen { width:100% !important; height:100% !important; max-width:none !important; border-radius:0 !important; }
+.player:-moz-full-screen { width:100% !important; height:100% !important; max-width:none !important; border-radius:0 !important; }
+.player:-ms-fullscreen { width:100% !important; height:100% !important; max-width:none !important; border-radius:0 !important; }
+.player:fullscreen { width:100% !important; height:100% !important; max-width:none !important; border-radius:0 !important; }
+.player:fullscreen video { width:100%; height:100%; object-fit:contain; }
 </style>
 </head>
 <body>
