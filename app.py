@@ -193,6 +193,27 @@ input[type=range]{
     width:100%;
     height:100%;
 }
+/* Double Tap Seek */
+.seek-indicator{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    font-size:38px;
+    color:white;
+    background:rgba(0,0,0,0.5);
+    padding:20px;
+    border-radius:50%;
+    opacity:0;
+    transition:0.25s ease;
+    pointer-events:none;
+}
+.seek-indicator.left{ left:15%; }
+.seek-indicator.right{ right:15%; }
+
+.seek-show{
+    opacity:1;
+    transform:translateY(-50%) scale(1.2);
+}
 </style>
 </head>
 
@@ -204,7 +225,8 @@ src="{{ url_for('stream_video', url=video_url_encoded) }}"
 autoplay preload="auto"></video>
 
 <div class="loader" id="loader"></div>
-
+<div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
+<div class="seek-indicator right" id="seekRight">10s ⏩</div>
 <div class="controls" id="controls">
 <div class="progress" id="progress">
 <div class="buffered" id="buffered"></div>
@@ -339,6 +361,41 @@ video.preload="auto";
 }
 }
 setInterval(ensureForwardBuffer,4000);
+/* ===== DOUBLE TAP 10s SEEK ===== */
+
+const seekLeft = document.getElementById("seekLeft");
+const seekRight = document.getElementById("seekRight");
+
+let lastTap = 0;
+
+player.addEventListener("click", function(e){
+
+    let now = Date.now();
+    let tapGap = now - lastTap;
+
+    if(tapGap < 300 && tapGap > 0){
+
+        const rect = player.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        if(x < rect.width / 2){
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            animateSeek(seekLeft);
+        }else{
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            animateSeek(seekRight);
+        }
+
+        video.play();
+    }
+
+    lastTap = now;
+});
+
+function animateSeek(el){
+    el.classList.add("seek-show");
+    setTimeout(()=> el.classList.remove("seek-show"), 350);
+}
 </script>
 
 </body>
