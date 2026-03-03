@@ -73,7 +73,7 @@ VIDEO_PLAYER_HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Modern Video Player</title>
+<title>pasan Video Player</title>
 
 <style>
 body{
@@ -161,6 +161,17 @@ video{
     align-items:center;
 }
 
+.title{
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    position: relative;
+}
 .left,.right{
     display:flex;
     align-items:center;
@@ -181,6 +192,7 @@ input[type=range]{
 
 .time{
     font-size:14px;
+    color:white;
 }
 
 /* Fullscreen Fix */
@@ -228,11 +240,11 @@ autoplay preload="auto"></video>
 <div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
 <div class="seek-indicator right" id="seekRight">10s ⏩</div>
 <div class="controls" id="controls">
+<div class="title">pasan video player</div>
 <div class="progress" id="progress">
 <div class="buffered" id="buffered"></div>
 <div class="played" id="played"></div>
 </div>
-
 <div class="row">
 <div class="left">
 <button id="playPause">▶</button>
