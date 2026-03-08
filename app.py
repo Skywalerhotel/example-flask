@@ -1,5 +1,5 @@
-from flask import Flask, request, Response, render_template_string, url_for
-import requests, urllib.parse
+from flask import Flask, request, Response, render_template_string, stream_with_context, url_for
+import subprocess, urllib.parse
 
 app = Flask(__name__)
 
@@ -9,7 +9,7 @@ HOME_HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ULTRA PLAYER PRO V7</title>
+<title>ULTRA PLAYER PRO V9</title>
 <style>
 body{margin:0;height:100vh;display:flex;justify-content:center;align-items:center;background:#0f172a;font-family:sans-serif;}
 .card{background:#111827;padding:30px;border-radius:16px;width:90%;max-width:500px;box-shadow:0 10px 30px rgba(0,0,0,0.4);}
@@ -23,7 +23,7 @@ button:hover{background:#1d4ed8;}
 <div class="card">
 <h2>Paste Video URL</h2>
 <form method="get" action="{{ url_for('player') }}">
-<input type="text" name="url" placeholder="https://example.com/video.mp4" required>
+<input type="text" name="url" placeholder="https://example.com/video.mkv" required>
 <button type="submit">Play Video</button>
 </form>
 </div>
@@ -37,7 +37,7 @@ PLAYER_HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ULTRA PLAYER PRO V7</title>
+<title>ULTRA PLAYER PRO V9</title>
 <style>
 body{margin:0;background:black;overflow:hidden;font-family:sans-serif;}
 #player{position:relative;width:100%;height:100vh;background:black;}
@@ -107,7 +107,7 @@ const seekRight=document.getElementById("seekRight")
 let lastTap=0
 let hideTimer
 
-// Load video
+// Load video from server-side transcoding stream
 video.src="{{ url_for('stream_video', url=video_url_encoded) }}";
 
 // Format time
@@ -149,7 +149,7 @@ reader.onload=function(){let data=reader.result;if(file.name.endsWith(".srt")){d
 reader.readAsText(file)
 }
 
-// Embedded Audio Tracks (MKV)
+// Audio Tracks
 function updateAudioTracks(){
 audioTracks.innerHTML=""
 if(video.audioTracks && video.audioTracks.length>0){
@@ -164,44 +164,52 @@ audioTracks.onchange=()=>{for(let i=0;i<video.audioTracks.length;i++){video.audi
 function showControls(){document.getElementById("controls").style.opacity=1;clearTimeout(hideTimer);hideTimer=setTimeout(()=>document.getElementById("controls").style.opacity=0,3000);}
 document.getElementById("player").onmousemove=showControls
 video.onplay=showControls
-
-// Swipe gestures
-let startX,startY
-video.addEventListener("touchstart",e=>{startY=e.touches[0].clientY;startX=e.touches[0].clientX;})
-video.addEventListener("touchmove",e=>{let dy=startY-e.touches[0].clientY;let dx=startX-e.touches[0].clientX;if(Math.abs(dy)>Math.abs(dx)){if(startX<window.innerWidth/2){document.body.style.filter=`brightness(${1+dy/300})`}else{video.volume=Math.min(1,Math.max(0,video.volume+dy/500))}}})
 </script>
-
 </body>
 </html>
 """
 
 # ===== FLASK ROUTES =====
-@app.route("/")
+@app.route('/')
 def home():
     return render_template_string(HOME_HTML)
 
-@app.route("/player")
+@app.route('/player')
 def player():
-    url = request.args.get("url")
+    url = request.args.get('url')
     if not url:
         return "No URL provided", 400
     encoded = urllib.parse.quote(url)
     return render_template_string(PLAYER_HTML, video_url_encoded=encoded)
 
-@app.route("/stream")
+@app.route('/stream')
 def stream_video():
-    encoded = request.args.get("url")
+    encoded = request.args.get('url')
     if not encoded:
         return "Missing URL", 400
     video_url = urllib.parse.unquote(encoded)
-    range_header = request.headers.get("Range")
-    headers = {"User-Agent":"Mozilla/5.0"}
-    if range_header: headers["Range"]=range_header
-    r = requests.get(video_url, headers=headers, stream=True)
+
+    # FFmpeg command for live streaming (transcode audio to AAC, copy video)
+    cmd = [
+        "ffmpeg", "-i", video_url,
+        "-map", "0:v", "-map", "0:a?",
+        "-c:v", "copy", "-c:a", "aac",
+        "-f", "mp4", "pipe:1"
+    ]
+
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**6)
+
     def generate():
-        for chunk in r.iter_content(65536):
-            if chunk: yield chunk
-    return Response(generate(), status=r.status_code, headers=dict(r.headers))
+        try:
+            while True:
+                data = process.stdout.read(32768)
+                if not data:
+                    break
+                yield data
+        finally:
+            process.kill()
+
+    return Response(stream_with_context(generate()), mimetype="video/mp4")
 
 if __name__=="__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
