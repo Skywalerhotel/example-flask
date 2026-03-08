@@ -39,7 +39,6 @@ input{
     margin-bottom:15px;
     background:#1f2937;
     color:white;
-    box-sizing:border-box;
 }
 button{
     width:100%;
@@ -101,17 +100,6 @@ video{
     height:auto;
     display:block;
     object-fit:contain;
-}
-
-/* ── Subtitle cue styling ── */
-video::cue {
-    background: rgba(0,0,0,0.72);
-    color: #ffffff;
-    font-size: 1.05em;
-    font-family: Arial, sans-serif;
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1.4;
 }
 
 /* Loader */
@@ -207,47 +195,6 @@ input[type=range]{
     color:white;
 }
 
-/* ── CC button ── */
-#ccBtn {
-    font-size: 13px;
-    font-weight: bold;
-    border: 2px solid rgba(255,255,255,0.45);
-    border-radius: 5px;
-    padding: 2px 7px;
-    letter-spacing: 0.04em;
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
-    line-height: 1.4;
-    user-select: none;
-}
-#ccBtn.cc-on {
-    background: #ef4444;
-    border-color: #ef4444;
-    color: #fff;
-}
-#ccBtn.cc-loaded {
-    border-color: #22c55e;
-    color: #22c55e;
-}
-
-/* ── CC toast notification ── */
-.cc-toast {
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.82);
-    color: #fff;
-    padding: 7px 18px;
-    border-radius: 8px;
-    font-size: 13px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.3s;
-    white-space: nowrap;
-    z-index: 99;
-}
-.cc-toast.show { opacity: 1; }
-
 /* Fullscreen Fix */
 .player:fullscreen{
     width:100% !important;
@@ -258,7 +205,6 @@ input[type=range]{
     width:100%;
     height:100%;
 }
-
 /* Double Tap Seek */
 .seek-indicator{
     position:absolute;
@@ -275,6 +221,7 @@ input[type=range]{
 }
 .seek-indicator.left{ left:15%; }
 .seek-indicator.right{ right:15%; }
+
 .seek-show{
     opacity:1;
     transform:translateY(-50%) scale(1.2);
@@ -285,287 +232,181 @@ input[type=range]{
 <body>
 
 <div class="player" id="player">
-  <video id="video"
-    src="{{ url_for('stream_video', url=video_url_encoded) }}"
-    autoplay preload="auto"></video>
+<video id="video"
+src="{{ url_for('stream_video', url=video_url_encoded) }}"
+autoplay preload="auto"></video>
 
-  <!-- Hidden SRT file input -->
-  <input type="file" id="srtFile" accept=".srt,.vtt" style="display:none">
+<div class="loader" id="loader"></div>
+<div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
+<div class="seek-indicator right" id="seekRight">10s ⏩</div>
+<div class="controls" id="controls">
+<div class="title">pasan video player</div>
+<div class="progress" id="progress">
+<div class="buffered" id="buffered"></div>
+<div class="played" id="played"></div>
+</div>
+<div class="row">
+<div class="left">
+<button id="playPause">▶</button>
+<button id="mute">🔊</button>
+<input type="range" id="volume" min="0" max="1" step="0.05" value="1">
+<span class="time" id="current">0:00</span> /
+<span class="time" id="duration">0:00</span>
+</div>
 
-  <!-- Toast -->
-  <div class="cc-toast" id="ccToast"></div>
-
-  <div class="loader" id="loader"></div>
-  <div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
-  <div class="seek-indicator right" id="seekRight">10s ⏩</div>
-
-  <div class="controls" id="controls">
-    <div class="title">pasan video player</div>
-    <div class="progress" id="progress">
-      <div class="buffered" id="buffered"></div>
-      <div class="played" id="played"></div>
-    </div>
-    <div class="row">
-      <div class="left">
-        <button id="playPause">▶</button>
-        <button id="mute">🔊</button>
-        <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
-        <span class="time" id="current">0:00</span> /
-        <span class="time" id="duration">0:00</span>
-      </div>
-
-      <div class="right">
-        <button id="ccBtn" title="Load subtitles (.srt)">CC</button>
-        <select id="speed">
-          <option value="0.5">0.5x</option>
-          <option value="1" selected>1x</option>
-          <option value="1.5">1.5x</option>
-          <option value="2">2x</option>
-        </select>
-        <button id="pip">📺</button>
-        <button id="fullscreen">⛶</button>
-      </div>
-    </div>
-  </div>
+<div class="right">
+<select id="speed">
+<option value="0.5">0.5x</option>
+<option value="1" selected>1x</option>
+<option value="1.5">1.5x</option>
+<option value="2">2x</option>
+</select>
+<button id="pip">📺</button>
+<button id="fullscreen">⛶</button>
+</div>
+</div>
+</div>
 </div>
 
 <script>
-const video      = document.getElementById("video");
-const player     = document.getElementById("player");
-const loader     = document.getElementById("loader");
-const controls   = document.getElementById("controls");
-const progress   = document.getElementById("progress");
-const played     = document.getElementById("played");
-const buffered   = document.getElementById("buffered");
-const playPause  = document.getElementById("playPause");
-const mute       = document.getElementById("mute");
-const volume     = document.getElementById("volume");
-const speed      = document.getElementById("speed");
-const fullscreen = document.getElementById("fullscreen");
-const pip        = document.getElementById("pip");
-const current    = document.getElementById("current");
-const duration   = document.getElementById("duration");
-const ccBtn      = document.getElementById("ccBtn");
-const srtFile    = document.getElementById("srtFile");
-const ccToast    = document.getElementById("ccToast");
+const video=document.getElementById("video");
+const player=document.getElementById("player");
+const loader=document.getElementById("loader");
+const controls=document.getElementById("controls");
+const progress=document.getElementById("progress");
+const played=document.getElementById("played");
+const buffered=document.getElementById("buffered");
+const playPause=document.getElementById("playPause");
+const mute=document.getElementById("mute");
+const volume=document.getElementById("volume");
+const speed=document.getElementById("speed");
+const fullscreen=document.getElementById("fullscreen");
+const pip=document.getElementById("pip");
+const current=document.getElementById("current");
+const duration=document.getElementById("duration");
 
 let hideTimer;
-let ccEnabled    = false;
-let subtitleBlobUrl = null;
-
-/* ─────────────── CC BUTTON ─────────────── */
-
-ccBtn.onclick = () => {
-  if (!subtitleBlobUrl) {
-    // No subtitle loaded yet — open file picker
-    srtFile.click();
-  } else {
-    // Toggle subtitles on/off
-    ccEnabled = !ccEnabled;
-    applyCC();
-  }
-};
-
-srtFile.onchange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const raw = ev.target.result;
-    let vttContent;
-
-    if (file.name.endsWith('.vtt')) {
-      vttContent = raw;
-    } else {
-      vttContent = srtToVtt(raw);
-    }
-
-    // Revoke old blob if any
-    if (subtitleBlobUrl) URL.revokeObjectURL(subtitleBlobUrl);
-
-    const blob = new Blob([vttContent], { type: 'text/vtt' });
-    subtitleBlobUrl = URL.createObjectURL(blob);
-
-    // Remove old tracks
-    while (video.firstChild) video.removeChild(video.firstChild);
-
-    const track = document.createElement('track');
-    track.kind    = 'subtitles';
-    track.label   = file.name;
-    track.srclang = 'en';
-    track.src     = subtitleBlobUrl;
-    track.default = true;
-    video.appendChild(track);
-
-    // Enable subtitles
-    ccEnabled = true;
-    applyCC();
-
-    ccBtn.classList.add('cc-loaded');
-    showToast('✅ Subtitles loaded: ' + file.name);
-  };
-
-  reader.readAsText(file);
-  // Reset so same file can be re-selected
-  srtFile.value = '';
-};
-
-function applyCC() {
-  const tracks = video.textTracks;
-  for (let i = 0; i < tracks.length; i++) {
-    tracks[i].mode = ccEnabled ? 'showing' : 'hidden';
-  }
-  if (ccEnabled) {
-    ccBtn.classList.add('cc-on');
-    ccBtn.classList.remove('cc-loaded');
-  } else {
-    ccBtn.classList.remove('cc-on');
-    ccBtn.classList.add('cc-loaded');
-  }
-}
-
-/* ─── SRT → WebVTT converter ─── */
-function srtToVtt(srt) {
-  // Normalise line endings
-  let text = srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-
-  // Replace SRT timestamp commas with dots  00:00:01,000 → 00:00:01.000
-  text = text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-
-  // Strip cue indices (lines that are just a number on their own)
-  text = text.replace(/^\d+\s*\n/gm, '');
-
-  return 'WEBVTT\n\n' + text;
-}
-
-/* ─── Toast helper ─── */
-let toastTimer;
-function showToast(msg) {
-  ccToast.textContent = msg;
-  ccToast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => ccToast.classList.remove('show'), 3000);
-}
-
-/* ─────────────── PLAYER CORE ─────────────── */
 
 /* Play Pause */
-playPause.onclick = () => {
-  if (video.paused) { video.play(); playPause.textContent = "❚❚"; }
-  else              { video.pause(); playPause.textContent = "▶"; }
+playPause.onclick=()=>{
+if(video.paused){video.play();playPause.textContent="❚❚";}
+else{video.pause();playPause.textContent="▶";}
 };
 
 /* Loader */
-video.onwaiting = () => loader.style.display = "block";
-video.onplaying = () => loader.style.display = "none";
+video.onwaiting=()=>loader.style.display="block";
+video.onplaying=()=>loader.style.display="none";
 
 /* Time Update */
-video.ontimeupdate = () => {
-  played.style.width = (video.currentTime / video.duration * 100) + "%";
-  current.textContent = format(video.currentTime);
+video.ontimeupdate=()=>{
+played.style.width=(video.currentTime/video.duration*100)+"%";
+current.textContent=format(video.currentTime);
 };
-video.onloadedmetadata = () => duration.textContent = format(video.duration);
+video.onloadedmetadata=()=>duration.textContent=format(video.duration);
 
-function format(t) {
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60).toString().padStart(2, "0");
-  return m + ":" + s;
+function format(t){
+const m=Math.floor(t/60);
+const s=Math.floor(t%60).toString().padStart(2,"0");
+return m+":"+s;
 }
 
 /* Buffered */
-video.onprogress = () => {
-  if (video.buffered.length > 0) {
-    const end = video.buffered.end(video.buffered.length - 1);
-    buffered.style.width = (end / video.duration * 100) + "%";
-  }
+video.onprogress=()=>{
+if(video.buffered.length>0){
+const end=video.buffered.end(video.buffered.length-1);
+buffered.style.width=(end/video.duration*100)+"%";
+}
 };
 
 /* Seek */
-progress.onclick = (e) => {
-  const rect = progress.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  video.currentTime = (x / rect.width) * video.duration;
+progress.onclick=(e)=>{
+const rect=progress.getBoundingClientRect();
+const x=e.clientX-rect.left;
+video.currentTime=(x/rect.width)*video.duration;
 };
 
 /* Volume */
-volume.oninput = () => video.volume = volume.value;
-mute.onclick = () => {
-  video.muted = !video.muted;
-  mute.textContent = video.muted ? "🔇" : "🔊";
+volume.oninput=()=>video.volume=volume.value;
+mute.onclick=()=>{
+video.muted=!video.muted;
+mute.textContent=video.muted?"🔇":"🔊";
 };
 
 /* Speed */
-speed.onchange = () => video.playbackRate = speed.value;
+speed.onchange=()=>video.playbackRate=speed.value;
 
 /* Fullscreen */
-fullscreen.onclick = () => {
-  if (!document.fullscreenElement) player.requestFullscreen();
-  else document.exitFullscreen();
+fullscreen.onclick=()=>{
+if(!document.fullscreenElement) player.requestFullscreen();
+else document.exitFullscreen();
 };
 
 /* PiP */
-pip.onclick = async () => {
-  if (document.pictureInPictureElement) document.exitPictureInPicture();
-  else await video.requestPictureInPicture();
+pip.onclick=async()=>{
+if(document.pictureInPictureElement) document.exitPictureInPicture();
+else await video.requestPictureInPicture();
 };
 
 /* Keyboard */
-document.onkeydown = (e) => {
-  if (e.code === "Space")       { e.preventDefault(); playPause.click(); }
-  if (e.code === "ArrowRight")  video.currentTime += 10;
-  if (e.code === "ArrowLeft")   video.currentTime -= 10;
-  if (e.code === "KeyC")        ccBtn.click();   // 'C' key toggles CC
+document.onkeydown=(e)=>{
+if(e.code==="Space"){e.preventDefault();playPause.click();}
+if(e.code==="ArrowRight") video.currentTime+=10;
+if(e.code==="ArrowLeft") video.currentTime-=10;
 };
 
 /* Auto Hide Controls */
-function showControls() {
-  controls.classList.remove("hide");
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => controls.classList.add("hide"), 3000);
+function showControls(){
+controls.classList.remove("hide");
+clearTimeout(hideTimer);
+hideTimer=setTimeout(()=>controls.classList.add("hide"),3000);
 }
-player.onmousemove = showControls;
-video.onplay = showControls;
+player.onmousemove=showControls;
+video.onplay=showControls;
 
-/* 60s Forward Buffer */
-function ensureForwardBuffer() {
-  if (video.buffered.length > 0) {
-    const end = video.buffered.end(video.buffered.length - 1);
-    if ((end - video.currentTime) < 60 && end < video.duration) {
-      video.preload = "auto";
-    }
-  }
+/* ===== 60s Forward Buffer ===== */
+function ensureForwardBuffer(){
+if(video.buffered.length>0){
+const end=video.buffered.end(video.buffered.length-1);
+if((end-video.currentTime)<60 && end<video.duration){
+video.preload="auto";
 }
-setInterval(ensureForwardBuffer, 4000);
+}
+}
+setInterval(ensureForwardBuffer,4000);
+/* ===== DOUBLE TAP 10s SEEK ===== */
 
-/* Double Tap 10s Seek */
-const seekLeft  = document.getElementById("seekLeft");
+const seekLeft = document.getElementById("seekLeft");
 const seekRight = document.getElementById("seekRight");
+
 let lastTap = 0;
 
-player.addEventListener("click", function(e) {
-  let now = Date.now();
-  let tapGap = now - lastTap;
+player.addEventListener("click", function(e){
 
-  if (tapGap < 300 && tapGap > 0) {
-    const rect = player.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    let now = Date.now();
+    let tapGap = now - lastTap;
 
-    if (x < rect.width / 2) {
-      video.currentTime = Math.max(0, video.currentTime - 10);
-      animateSeek(seekLeft);
-    } else {
-      video.currentTime = Math.min(video.duration, video.currentTime + 10);
-      animateSeek(seekRight);
+    if(tapGap < 300 && tapGap > 0){
+
+        const rect = player.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        if(x < rect.width / 2){
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            animateSeek(seekLeft);
+        }else{
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            animateSeek(seekRight);
+        }
+
+        video.play();
     }
-    video.play();
-  }
-  lastTap = now;
+
+    lastTap = now;
 });
 
-function animateSeek(el) {
-  el.classList.add("seek-show");
-  setTimeout(() => el.classList.remove("seek-show"), 350);
+function animateSeek(el){
+    el.classList.add("seek-show");
+    setTimeout(()=> el.classList.remove("seek-show"), 350);
 }
 </script>
 
@@ -596,7 +437,7 @@ def stream_video():
     video_url = urllib.parse.unquote(encoded)
     range_header = request.headers.get('Range')
 
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent':'Mozilla/5.0'}
     if range_header:
         headers['Range'] = range_header
 
@@ -610,5 +451,5 @@ def stream_video():
 
     return Response(generate(), status=upstream.status_code, headers=dict(upstream.headers))
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
