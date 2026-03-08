@@ -141,6 +141,11 @@ video{
     cursor:pointer;
     position:relative;
     margin-bottom:12px;
+    /* bigger touch target without changing visual height */
+    padding:10px 0;
+    margin-top:-10px;
+    touch-action:none;
+    -webkit-tap-highlight-color:transparent;
 }
 .buffered{
     position:absolute;
@@ -184,14 +189,23 @@ video{
     background:none;
     border:none;
     color:white;
-    font-size:16px;
+    font-size:18px;
     cursor:pointer;
-    padding:4px;
+    padding:0;
     border-radius:6px;
     transition:background 0.15s;
     line-height:1;
+    min-width:44px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none;
 }
-.ctrl-btn:hover{ background:rgba(255,255,255,0.15); }
+.ctrl-btn:active{ background:rgba(255,255,255,0.25); }
 
 select.ctrl-select{
     background:#1f2937;
@@ -199,13 +213,18 @@ select.ctrl-select{
     color:white;
     font-size:13px;
     cursor:pointer;
-    padding:3px 6px;
+    padding:8px 6px;
     border-radius:6px;
+    min-height:44px;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
 }
 
 input[type=range]{
     width:75px;
     cursor:pointer;
+    min-height:44px;
+    touch-action:manipulation;
 }
 
 .time{
@@ -219,14 +238,23 @@ input[type=range]{
     background:none;
     border:none;
     color:white;
-    font-size:17px;
+    font-size:18px;
     cursor:pointer;
-    padding:4px 6px;
+    padding:0;
     border-radius:6px;
     transition:background 0.15s, transform 0.3s;
     line-height:1;
+    min-width:44px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none;
 }
-.settings-btn:hover{ background:rgba(255,255,255,0.15); }
+.settings-btn:active{ background:rgba(255,255,255,0.25); }
 .settings-btn.open{ transform:rotate(45deg); }
 
 /* ===== SETTINGS PANEL ===== */
@@ -542,23 +570,77 @@ video.addEventListener("progress", function() {
 });
 
 // ===========================
-// SEEK BAR
+// SEEK BAR — mouse + touch
 // ===========================
-progressBar.addEventListener("mousedown", function(e) {
-    e.stopPropagation();
-    seekTo(e);
-    document.addEventListener("mousemove", seekTo);
-    document.addEventListener("mouseup", function up() {
-        document.removeEventListener("mousemove", seekTo);
-        document.removeEventListener("mouseup", up);
-    });
-});
-
-function seekTo(e) {
+function applySeek(clientX) {
     var rect = progressBar.getBoundingClientRect();
-    var x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    var x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     video.currentTime = (x / rect.width) * video.duration;
 }
+progressBar.addEventListener("mousedown", function(e) {
+    e.stopPropagation();
+    applySeek(e.clientX);
+    function onMove(e2) { applySeek(e2.clientX); }
+    function onUp()   { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+});
+progressBar.addEventListener("touchstart", function(e) {
+    e.stopPropagation();
+    applySeek(e.touches[0].clientX);
+}, { passive: true });
+progressBar.addEventListener("touchmove", function(e) {
+    e.stopPropagation();
+    applySeek(e.touches[0].clientX);
+}, { passive: true });
+
+// ===========================
+// DOUBLE-TAP SEEK — touchend (mobile) + click (desktop)
+// ===========================
+var tapTimer  = null;
+var tapCount  = 0;
+var tapX      = 0;
+var lastTouch = 0;
+
+function handleTap(clientX) {
+    tapCount++;
+    tapX = clientX;
+    if (tapCount === 1) {
+        tapTimer = setTimeout(function() {
+            tapCount = 0;
+            if (video.paused) video.play();
+            else video.pause();
+        }, 230);
+    } else if (tapCount >= 2) {
+        clearTimeout(tapTimer);
+        tapCount = 0;
+        var rect = player.getBoundingClientRect();
+        if (tapX - rect.left < rect.width / 2) {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            flash(seekLeft);
+        } else {
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            flash(seekRight);
+        }
+    }
+}
+
+// Mobile: use touchend — instant, no 300ms delay
+player.addEventListener("touchend", function(e) {
+    if (controls.contains(e.target))      return;
+    if (settingsPanel.contains(e.target)) return;
+    e.preventDefault();
+    handleTap(e.changedTouches[0].clientX);
+    lastTouch = Date.now();
+}, { passive: false });
+
+// Desktop: click fallback (skip if touch already handled it)
+player.addEventListener("click", function(e) {
+    if (controls.contains(e.target))      return;
+    if (settingsPanel.contains(e.target)) return;
+    if (Date.now() - lastTouch < 600)     return;
+    handleTap(e.clientX);
+});
 
 // ===========================
 // VOLUME
@@ -641,45 +723,6 @@ player.addEventListener("mouseleave", function() {
 });
 video.addEventListener("pause", keepControls);
 video.addEventListener("play",  showControls);
-
-// ===========================
-// DOUBLE-TAP SEEK on player overlay
-// — separate transparent div sits over video, under controls
-// ===========================
-var tapTimer   = null;
-var tapCount   = 0;
-var tapX       = 0;
-
-// Use the player div but skip if target is inside controls or settings
-player.addEventListener("click", function(e) {
-    // ignore clicks that originate from controls or settings panel
-    if (controls.contains(e.target)) return;
-    if (settingsPanel.contains(e.target)) return;
-
-    tapCount++;
-    tapX = e.clientX;
-
-    if (tapCount === 1) {
-        tapTimer = setTimeout(function() {
-            // single tap — toggle play/pause
-            if (video.paused) video.play();
-            else video.pause();
-            tapCount = 0;
-        }, 250);
-    } else if (tapCount === 2) {
-        clearTimeout(tapTimer);
-        tapCount = 0;
-        // double tap — seek
-        var rect = player.getBoundingClientRect();
-        if (tapX - rect.left < rect.width / 2) {
-            video.currentTime = Math.max(0, video.currentTime - 10);
-            flash(seekLeft);
-        } else {
-            video.currentTime = Math.min(video.duration, video.currentTime + 10);
-            flash(seekRight);
-        }
-    }
-});
 
 function flash(el) {
     el.classList.add("seek-show");
