@@ -151,21 +151,26 @@ border-radius:12px;
 display:none;
 flex-direction:column;
 min-width:200px;
+color:white;
 }
 
 .settingsMenu div{
 padding:10px;
-border-bottom:1px solid rgba(255,255,255,.1);
+border-bottom:1px solid rgba(255,255,255,.15);
 cursor:pointer;
+color:white;
+font-size:16px;
 }
 
 .settingsMenu div:hover{
 background:#ef4444;
+color:white;
 }
 
-.audioMenu,.subMenu,.speedMenu{
-display:none;
-flex-direction:column;
+.audioMenu div,
+.subMenu div,
+.speedMenu div{
+color:white;
 }
 
 </style>
