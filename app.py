@@ -75,18 +75,16 @@ VIDEO_PLAYER_HTML = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>pasan Video Player</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
 
 <style>
-*{ box-sizing:border-box; }
 body{
     margin:0;
     background:#0f172a;
     display:flex;
     justify-content:center;
     align-items:center;
-    min-height:100vh;
-    font-family:'Poppins',Arial,sans-serif;
+    height:100vh;
+    font-family:Arial;
 }
 
 .player{
@@ -105,6 +103,17 @@ video{
     object-fit:contain;
 }
 
+/* ── Subtitle cue styling ── */
+video::cue {
+    background: rgba(0,0,0,0.72);
+    color: #ffffff;
+    font-size: 1.05em;
+    font-family: Arial, sans-serif;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1.4;
+}
+
 /* Loader */
 .loader{
     position:absolute;
@@ -118,22 +127,22 @@ video{
     border-radius:50%;
     animation:spin 1s linear infinite;
     display:none;
-    z-index:5;
 }
-@keyframes spin{100%{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes spin{
+100%{transform:translate(-50%,-50%) rotate(360deg)}
+}
 
 /* Controls */
 .controls{
     position:absolute;
     bottom:0;
     width:100%;
-    background:linear-gradient(to top,rgba(0,0,0,0.92),transparent);
+    background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
     padding:15px;
+    box-sizing:border-box;
     transition:opacity 0.3s;
-    z-index:30;
-    touch-action:manipulation;
 }
-.hide{opacity:0; pointer-events:none;}
+.hide{opacity:0}
 
 .progress{
     height:6px;
@@ -142,11 +151,6 @@ video{
     cursor:pointer;
     position:relative;
     margin-bottom:12px;
-    /* bigger touch target without changing visual height */
-    padding:10px 0;
-    margin-top:-10px;
-    touch-action:none;
-    -webkit-tap-highlight-color:transparent;
 }
 .buffered{
     position:absolute;
@@ -170,818 +174,401 @@ video{
 }
 
 .title{
-    font-family:'Poppins',sans-serif;
-    font-size:1.4rem;
-    font-weight:700;
-    background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-    background-clip:text;
-    text-align:center;
-    margin-bottom:8px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    position: relative;
 }
 .left,.right{
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:12px;
 }
 
-.ctrl-btn{
+button,select{
     background:none;
     border:none;
     color:white;
-    font-size:18px;
+    font-size:16px;
     cursor:pointer;
-    padding:0;
-    border-radius:6px;
-    transition:background 0.15s;
-    line-height:1;
-    min-width:44px;
-    min-height:44px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    -webkit-tap-highlight-color:transparent;
-    touch-action:manipulation;
-    user-select:none;
-    -webkit-user-select:none;
-}
-.ctrl-btn:active{ background:rgba(255,255,255,0.25); }
-
-select.ctrl-select{
-    background:#1f2937;
-    border:1px solid #374151;
-    color:white;
-    font-size:13px;
-    cursor:pointer;
-    padding:8px 6px;
-    border-radius:6px;
-    min-height:44px;
-    -webkit-tap-highlight-color:transparent;
-    touch-action:manipulation;
 }
 
 input[type=range]{
-    width:75px;
-    cursor:pointer;
-    min-height:44px;
-    touch-action:manipulation;
+    width:80px;
 }
 
 .time{
-    font-size:13px;
-    color:#e2e8f0;
-    white-space:nowrap;
-}
-
-/* Settings Icon */
-.settings-btn{
-    background:none;
-    border:none;
-    color:white;
-    font-size:18px;
-    cursor:pointer;
-    padding:0;
-    border-radius:6px;
-    transition:background 0.15s, transform 0.3s;
-    line-height:1;
-    min-width:44px;
-    min-height:44px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    -webkit-tap-highlight-color:transparent;
-    touch-action:manipulation;
-    user-select:none;
-    -webkit-user-select:none;
-}
-.settings-btn:active{ background:rgba(255,255,255,0.25); }
-.settings-btn.open{ transform:rotate(45deg); }
-
-/* ===== SETTINGS PANEL ===== */
-.settings-panel{
-    position:absolute;
-    bottom:80px;
-    right:14px;
-    width:310px;
-    background:#111827;
-    border:1px solid #1f2937;
-    border-radius:14px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.7);
-    z-index:40;
-    overflow:hidden;
-    transform-origin:bottom right;
-    transform:scale(0.85);
-    opacity:0;
-    pointer-events:none;
-    transition:transform 0.2s cubic-bezier(.34,1.56,.64,1), opacity 0.18s ease;
-}
-.settings-panel.open{
-    transform:scale(1);
-    opacity:1;
-    pointer-events:all;
-}
-
-.settings-header{
-    padding:14px 16px 10px;
     font-size:14px;
-    font-weight:700;
-    color:#94a3b8;
-    text-transform:uppercase;
-    letter-spacing:0.08em;
-    border-bottom:1px solid #1f2937;
+    color:white;
 }
 
-.settings-section{
-    padding:12px 16px;
-    border-bottom:1px solid #1e293b;
+/* ── CC button ── */
+#ccBtn {
+    font-size: 13px;
+    font-weight: bold;
+    border: 2px solid rgba(255,255,255,0.45);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    line-height: 1.4;
+    user-select: none;
 }
-.settings-section:last-child{ border-bottom:none; }
+#ccBtn.cc-on {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #fff;
+}
+#ccBtn.cc-loaded {
+    border-color: #22c55e;
+    color: #22c55e;
+}
 
-.section-title{
-    font-size:11px;
-    font-weight:600;
-    color:#64748b;
-    text-transform:uppercase;
-    letter-spacing:0.1em;
-    margin-bottom:8px;
+/* ── CC toast notification ── */
+.cc-toast {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.82);
+    color: #fff;
+    padding: 7px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    white-space: nowrap;
+    z-index: 99;
 }
+.cc-toast.show { opacity: 1; }
 
-/* Subtitle rows */
-.sub-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:6px 8px;
-    border-radius:8px;
-    cursor:pointer;
-    transition:background 0.15s;
+/* Fullscreen Fix */
+.player:fullscreen{
+    width:100% !important;
+    height:100% !important;
+    border-radius:0 !important;
 }
-.sub-row:hover{ background:#1f2937; }
-.sub-row.active{ background:#1e3a5f; }
-
-.sub-dot{
-    width:8px;
-    height:8px;
-    border-radius:50%;
-    background:#374151;
-    flex-shrink:0;
-    transition:background 0.15s;
-}
-.sub-row.active .sub-dot{ background:#3b82f6; }
-
-.sub-label{
-    font-size:13px;
-    color:#e2e8f0;
-    flex:1;
-}
-.sub-badge{
-    font-size:10px;
-    padding:2px 6px;
-    border-radius:4px;
-    background:#1f2937;
-    color:#64748b;
-    font-weight:600;
-}
-.sub-row.active .sub-label{ color:#93c5fd; }
-
-/* Upload button */
-.upload-btn{
-    display:flex;
-    align-items:center;
-    gap:8px;
+.player:fullscreen video{
     width:100%;
-    padding:8px 10px;
-    background:#1f2937;
-    border:1.5px dashed #374151;
-    border-radius:8px;
-    color:#94a3b8;
-    font-size:12px;
-    font-family:'Poppins',Arial,sans-serif;
-    cursor:pointer;
-    transition:all 0.15s;
-    margin-top:6px;
-}
-.upload-btn:hover{
-    border-color:#3b82f6;
-    color:#93c5fd;
-    background:#172033;
-}
-.upload-btn svg{ flex-shrink:0; }
-
-/* Audio rows */
-.audio-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:6px 8px;
-    border-radius:8px;
-    cursor:pointer;
-    transition:background 0.15s;
-}
-.audio-row:hover{ background:#1f2937; }
-.audio-row.active{ background:#1f2937; border-left:3px solid #8b5cf6; }
-.audio-dot{
-    width:8px; height:8px; border-radius:50%;
-    background:#374151; flex-shrink:0; transition:background 0.15s;
-}
-.audio-row.active .audio-dot{ background:#8b5cf6; }
-.audio-label{ font-size:13px; color:#e2e8f0; flex:1; }
-.audio-row.active .audio-label{ color:#c4b5fd; }
-
-.no-tracks{
-    font-size:12px;
-    color:#4b5563;
-    padding:4px 8px;
-    font-style:italic;
+    height:100%;
 }
 
-/* Hidden file input */
-#srtUpload{ display:none; }
-
-/* Fullscreen */
-.player:fullscreen{ width:100% !important; height:100% !important; border-radius:0 !important; }
-.player:fullscreen video{ width:100%; height:100%; }
-
-/* Tap overlay — covers video only, sits below controls */
-#tapOverlay{
-    position:absolute;
-    top:0; left:0; right:0; bottom:0;
-    z-index:2;
-    -webkit-tap-highlight-color:transparent;
-    touch-action:manipulation;
-}
-
-/* Seek indicator */
+/* Double Tap Seek */
 .seek-indicator{
     position:absolute;
     top:50%;
     transform:translateY(-50%);
-    font-size:36px;
+    font-size:38px;
     color:white;
     background:rgba(0,0,0,0.5);
-    padding:18px;
+    padding:20px;
     border-radius:50%;
     opacity:0;
     transition:0.25s ease;
     pointer-events:none;
-    z-index:5;
 }
-.seek-indicator.left{ left:12%; }
-.seek-indicator.right{ right:12%; }
-.seek-show{ opacity:1; transform:translateY(-50%) scale(1.2); }
+.seek-indicator.left{ left:15%; }
+.seek-indicator.right{ right:15%; }
+.seek-show{
+    opacity:1;
+    transform:translateY(-50%) scale(1.2);
+}
 </style>
 </head>
 
 <body>
+
 <div class="player" id="player">
-<video id="video"
+  <video id="video"
     src="{{ url_for('stream_video', url=video_url_encoded) }}"
     autoplay preload="auto"></video>
 
-<div class="loader" id="loader"></div>
-<div id="tapOverlay"></div>
-<div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
-<div class="seek-indicator right" id="seekRight">10s ⏩</div>
+  <!-- Hidden SRT file input -->
+  <input type="file" id="srtFile" accept=".srt,.vtt" style="display:none">
 
-<!-- ===== SETTINGS PANEL ===== -->
-<div class="settings-panel" id="settingsPanel">
-    <div class="settings-header">⚙ Settings</div>
+  <!-- Toast -->
+  <div class="cc-toast" id="ccToast"></div>
 
-    <!-- SUBTITLES SECTION -->
-    <div class="settings-section">
-        <div class="section-title">Subtitles / CC</div>
-        <div id="subtitleList">
-            <!-- Off option always first -->
-            <div class="sub-row active" data-track="-1" onclick="selectSubtitle(this,-1)">
-                <div class="sub-dot"></div>
-                <span class="sub-label">Off</span>
-            </div>
-            <!-- Embedded tracks injected by JS -->
-        </div>
+  <div class="loader" id="loader"></div>
+  <div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
+  <div class="seek-indicator right" id="seekRight">10s ⏩</div>
 
-        <!-- Upload External SRT -->
-        <label class="upload-btn" for="srtUpload">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            Load External SRT / VTT
-        </label>
-        <input type="file" id="srtUpload" accept=".srt,.vtt">
-    </div>
-
-    <!-- AUDIO TRACK SECTION -->
-    <div class="settings-section">
-        <div class="section-title">Audio Track</div>
-        <div id="audioList">
-            <div class="no-tracks" id="noAudioMsg">Detecting audio tracks…</div>
-        </div>
-    </div>
-</div>
-
-<!-- CONTROLS -->
-<div class="controls" id="controls">
+  <div class="controls" id="controls">
     <div class="title">pasan video player</div>
     <div class="progress" id="progress">
-        <div class="buffered" id="buffered"></div>
-        <div class="played" id="played"></div>
+      <div class="buffered" id="buffered"></div>
+      <div class="played" id="played"></div>
     </div>
     <div class="row">
-        <div class="left">
-            <button class="ctrl-btn" id="playPause">▶</button>
-            <button class="ctrl-btn" id="mute">🔊</button>
-            <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
-            <span class="time"><span id="current">0:00</span> / <span id="duration">0:00</span></span>
-        </div>
-        <div class="right">
-            <select class="ctrl-select" id="speed">
-                <option value="0.5">0.5×</option>
-                <option value="1" selected>1×</option>
-                <option value="1.5">1.5×</option>
-                <option value="2">2×</option>
-            </select>
-            <button class="ctrl-btn" id="pip" title="Picture in Picture">📺</button>
-            <button class="ctrl-btn" id="fullscreen" title="Fullscreen">⛶</button>
-            <button class="settings-btn" id="settingsBtn" title="Settings">⚙</button>
-        </div>
+      <div class="left">
+        <button id="playPause">▶</button>
+        <button id="mute">🔊</button>
+        <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
+        <span class="time" id="current">0:00</span> /
+        <span class="time" id="duration">0:00</span>
+      </div>
+
+      <div class="right">
+        <button id="ccBtn" title="Load subtitles (.srt)">CC</button>
+        <select id="speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+        <button id="pip">📺</button>
+        <button id="fullscreen">⛶</button>
+      </div>
     </div>
+  </div>
 </div>
-</div><!-- end .player -->
 
 <script>
-const video         = document.getElementById("video");
-const player        = document.getElementById("player");
-const loader        = document.getElementById("loader");
-const controls      = document.getElementById("controls");
-const progressBar   = document.getElementById("progress");
-const played        = document.getElementById("played");
-const bufferedEl    = document.getElementById("buffered");
-const playPause     = document.getElementById("playPause");
-const muteBtn       = document.getElementById("mute");
-const volumeEl      = document.getElementById("volume");
-const speedEl       = document.getElementById("speed");
-const fullscreenBtn = document.getElementById("fullscreen");
-const pipBtn        = document.getElementById("pip");
-const currentEl     = document.getElementById("current");
-const durationEl    = document.getElementById("duration");
-const settingsBtn   = document.getElementById("settingsBtn");
-const settingsPanel = document.getElementById("settingsPanel");
-const srtUpload     = document.getElementById("srtUpload");
-const subtitleList  = document.getElementById("subtitleList");
-const audioList     = document.getElementById("audioList");
-const seekLeft      = document.getElementById("seekLeft");
-const seekRight     = document.getElementById("seekRight");
+const video      = document.getElementById("video");
+const player     = document.getElementById("player");
+const loader     = document.getElementById("loader");
+const controls   = document.getElementById("controls");
+const progress   = document.getElementById("progress");
+const played     = document.getElementById("played");
+const buffered   = document.getElementById("buffered");
+const playPause  = document.getElementById("playPause");
+const mute       = document.getElementById("mute");
+const volume     = document.getElementById("volume");
+const speed      = document.getElementById("speed");
+const fullscreen = document.getElementById("fullscreen");
+const pip        = document.getElementById("pip");
+const current    = document.getElementById("current");
+const duration   = document.getElementById("duration");
+const ccBtn      = document.getElementById("ccBtn");
+const srtFile    = document.getElementById("srtFile");
+const ccToast    = document.getElementById("ccToast");
 
-// ===========================
-// PLAY / PAUSE BUTTON
-// ===========================
-playPause.onclick = function() {
-    if (video.paused) video.play();
-    else video.pause();
-};
-video.addEventListener("play",  function() { playPause.textContent = "❚❚"; });
-video.addEventListener("pause", function() { playPause.textContent = "▶"; });
+let hideTimer;
+let ccEnabled    = false;
+let subtitleBlobUrl = null;
 
-// ===========================
-// LOADER SPINNER
-// ===========================
-video.addEventListener("waiting", function() { loader.style.display = "block"; });
-video.addEventListener("playing", function() { loader.style.display = "none"; });
-video.addEventListener("canplay", function() { loader.style.display = "none"; });
+/* ─────────────── CC BUTTON ─────────────── */
 
-// ===========================
-// TIME / PROGRESS
-// ===========================
-function fmt(t) {
-    if (!t || isNaN(t)) return "0:00";
-    var m = Math.floor(t / 60);
-    var s = Math.floor(t % 60).toString().padStart(2, "0");
-    return m + ":" + s;
-}
-
-video.addEventListener("timeupdate", function() {
-    if (video.duration) {
-        played.style.width = (video.currentTime / video.duration * 100) + "%";
-        currentEl.textContent = fmt(video.currentTime);
-    }
-});
-
-video.addEventListener("loadedmetadata", function() {
-    durationEl.textContent = fmt(video.duration);
-    detectTracks();
-});
-
-video.addEventListener("progress", function() {
-    if (video.buffered.length && video.duration) {
-        var end = video.buffered.end(video.buffered.length - 1);
-        bufferedEl.style.width = (end / video.duration * 100) + "%";
-    }
-});
-
-// ===========================
-// SEEK BAR — mouse + touch
-// ===========================
-function applySeek(clientX) {
-    var rect = progressBar.getBoundingClientRect();
-    var x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    video.currentTime = (x / rect.width) * video.duration;
-}
-progressBar.addEventListener("mousedown", function(e) {
-    e.stopPropagation();
-    applySeek(e.clientX);
-    function onMove(e2) { applySeek(e2.clientX); }
-    function onUp()   { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-});
-progressBar.addEventListener("touchstart", function(e) {
-    e.stopPropagation();
-    applySeek(e.touches[0].clientX);
-}, { passive: true });
-progressBar.addEventListener("touchmove", function(e) {
-    e.stopPropagation();
-    applySeek(e.touches[0].clientX);
-}, { passive: true });
-
-// ===========================
-// DOUBLE-TAP SEEK — on tapOverlay only, never touches controls
-// ===========================
-var tapOverlay = document.getElementById("tapOverlay");
-var tapTimer   = null;
-var tapCount   = 0;
-var tapX       = 0;
-
-function handleTap(clientX) {
-    tapCount++;
-    tapX = clientX;
-    if (tapCount === 1) {
-        tapTimer = setTimeout(function() {
-            tapCount = 0;
-            if (video.paused) video.play();
-            else video.pause();
-        }, 230);
-    } else if (tapCount >= 2) {
-        clearTimeout(tapTimer);
-        tapCount = 0;
-        var rect = tapOverlay.getBoundingClientRect();
-        if (tapX - rect.left < rect.width / 2) {
-            video.currentTime = Math.max(0, video.currentTime - 10);
-            flash(seekLeft);
-        } else {
-            video.currentTime = Math.min(video.duration, video.currentTime + 10);
-            flash(seekRight);
-        }
-    }
-}
-
-// Touch — no preventDefault, controls are on a higher z-index layer
-tapOverlay.addEventListener("touchend", function(e) {
-    handleTap(e.changedTouches[0].clientX);
-});
-
-// Desktop mouse click
-tapOverlay.addEventListener("click", function(e) {
-    handleTap(e.clientX);
-});
-
-// ===========================
-// VOLUME
-// ===========================
-muteBtn.onclick = function() {
-    video.muted = !video.muted;
-    muteBtn.textContent = video.muted ? "🔇" : "🔊";
+ccBtn.onclick = () => {
+  if (!subtitleBlobUrl) {
+    // No subtitle loaded yet — open file picker
+    srtFile.click();
+  } else {
+    // Toggle subtitles on/off
+    ccEnabled = !ccEnabled;
+    applyCC();
+  }
 };
 
-volumeEl.oninput = function() {
-    video.volume = parseFloat(volumeEl.value);
-    video.muted = (video.volume === 0);
-    muteBtn.textContent = video.muted ? "🔇" : "🔊";
+srtFile.onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const raw = ev.target.result;
+    let vttContent;
+
+    if (file.name.endsWith('.vtt')) {
+      vttContent = raw;
+    } else {
+      vttContent = srtToVtt(raw);
+    }
+
+    // Revoke old blob if any
+    if (subtitleBlobUrl) URL.revokeObjectURL(subtitleBlobUrl);
+
+    const blob = new Blob([vttContent], { type: 'text/vtt' });
+    subtitleBlobUrl = URL.createObjectURL(blob);
+
+    // Remove old tracks
+    while (video.firstChild) video.removeChild(video.firstChild);
+
+    const track = document.createElement('track');
+    track.kind    = 'subtitles';
+    track.label   = file.name;
+    track.srclang = 'en';
+    track.src     = subtitleBlobUrl;
+    track.default = true;
+    video.appendChild(track);
+
+    // Enable subtitles
+    ccEnabled = true;
+    applyCC();
+
+    ccBtn.classList.add('cc-loaded');
+    showToast('✅ Subtitles loaded: ' + file.name);
+  };
+
+  reader.readAsText(file);
+  // Reset so same file can be re-selected
+  srtFile.value = '';
 };
 
-// ===========================
-// SPEED
-// ===========================
-speedEl.onchange = function() {
-    video.playbackRate = parseFloat(speedEl.value);
-};
-
-// ===========================
-// FULLSCREEN
-// ===========================
-fullscreenBtn.onclick = function() {
-    if (!document.fullscreenElement) player.requestFullscreen();
-    else document.exitFullscreen();
-};
-
-// ===========================
-// PiP
-// ===========================
-pipBtn.onclick = async function() {
-    try {
-        if (document.pictureInPictureElement) document.exitPictureInPicture();
-        else await video.requestPictureInPicture();
-    } catch(e) {}
-};
-
-// ===========================
-// KEYBOARD
-// ===========================
-document.addEventListener("keydown", function(e) {
-    var tag = document.activeElement.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-    if (e.code === "Space")      { e.preventDefault(); playPause.onclick(); }
-    if (e.code === "ArrowRight") { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 10); }
-    if (e.code === "ArrowLeft")  { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
-    if (e.code === "KeyM")       { muteBtn.onclick(); }
-    if (e.code === "KeyF")       { fullscreenBtn.onclick(); }
-});
-
-// ===========================
-// AUTO-HIDE CONTROLS
-// ===========================
-var hideTimer = null;
-
-function showControls() {
-    controls.classList.remove("hide");
-    clearTimeout(hideTimer);
-    if (!video.paused && !settingsPanel.classList.contains("open")) {
-        hideTimer = setTimeout(function() {
-            controls.classList.add("hide");
-        }, 3000);
-    }
+function applyCC() {
+  const tracks = video.textTracks;
+  for (let i = 0; i < tracks.length; i++) {
+    tracks[i].mode = ccEnabled ? 'showing' : 'hidden';
+  }
+  if (ccEnabled) {
+    ccBtn.classList.add('cc-on');
+    ccBtn.classList.remove('cc-loaded');
+  } else {
+    ccBtn.classList.remove('cc-on');
+    ccBtn.classList.add('cc-loaded');
+  }
 }
 
-function keepControls() {
-    controls.classList.remove("hide");
-    clearTimeout(hideTimer);
-}
-
-player.addEventListener("mousemove", showControls);
-player.addEventListener("mouseleave", function() {
-    if (!video.paused && !settingsPanel.classList.contains("open")) {
-        clearTimeout(hideTimer);
-        hideTimer = setTimeout(function() { controls.classList.add("hide"); }, 1500);
-    }
-});
-video.addEventListener("pause", keepControls);
-video.addEventListener("play",  showControls);
-
-function flash(el) {
-    el.classList.add("seek-show");
-    setTimeout(function() { el.classList.remove("seek-show"); }, 500);
-}
-
-// ===========================
-// SETTINGS PANEL
-// ===========================
-settingsBtn.onclick = function(e) {
-    e.stopPropagation();
-    var open = settingsPanel.classList.toggle("open");
-    settingsBtn.classList.toggle("open", open);
-    if (open) keepControls();
-    else showControls();
-};
-
-document.addEventListener("click", function(e) {
-    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
-        if (settingsPanel.classList.contains("open")) {
-            settingsPanel.classList.remove("open");
-            settingsBtn.classList.remove("open");
-            showControls();
-        }
-    }
-});
-
-settingsPanel.addEventListener("click", function(e) { e.stopPropagation(); });
-
-// ===========================
-// FORWARD BUFFER
-// ===========================
-setInterval(function() {
-    if (video.buffered.length > 0 && video.duration) {
-        var end = video.buffered.end(video.buffered.length - 1);
-        if ((end - video.currentTime) < 60 && end < video.duration) {
-            video.preload = "auto";
-        }
-    }
-}, 4000);
-
-// ======================================
-// ===== SUBTITLE TRACK DETECTION =====
-// ======================================
-
-let externalSubTrack = null;
-let activeSubIndex = -1; // -1 = off
-
-function detectTracks() {
-    // Small delay to let the browser parse embedded tracks
-    setTimeout(buildSubtitleUI, 600);
-    setTimeout(buildAudioUI, 600);
-}
-
-function buildSubtitleUI() {
-    const tracks = video.textTracks;
-    // Remove old entries except "Off"
-    const rows = subtitleList.querySelectorAll(".sub-row[data-track]");
-    rows.forEach(r => { if (r.dataset.track != "-1") r.remove(); });
-
-    if (tracks.length === 0) {
-        // Keep just "Off" – already there
-        return;
-    }
-
-    for (let i = 0; i < tracks.length; i++) {
-        const t = tracks[i];
-        const lang = t.language || "";
-        const label = t.label || ("Track " + (i + 1));
-        const kind  = t.kind || "subtitles";
-
-        const row = document.createElement("div");
-        row.className = "sub-row";
-        row.dataset.track = i;
-        row.onclick = () => selectSubtitle(row, i);
-        row.innerHTML = `
-            <div class="sub-dot"></div>
-            <span class="sub-label">${escHtml(label)}${lang ? " ["+escHtml(lang)+"]":""}</span>
-            <span class="sub-badge">${escHtml(kind)}</span>`;
-        subtitleList.appendChild(row);
-
-        // Disable all tracks by default (honour "Off" default)
-        t.mode = "disabled";
-    }
-}
-
-function selectSubtitle(rowEl, index) {
-    // Remove active from all
-    subtitleList.querySelectorAll(".sub-row").forEach(r => r.classList.remove("active"));
-    rowEl.classList.add("active");
-    activeSubIndex = index;
-
-    const tracks = video.textTracks;
-
-    // Remove any injected external track cue element
-    if (externalSubTrack && index !== 9999) {
-        externalSubTrack.mode = "disabled";
-    }
-
-    if (index === -1) {
-        // Turn off all
-        for (let i = 0; i < tracks.length; i++) tracks[i].mode = "disabled";
-        hideCueDisplay();
-        return;
-    }
-
-    if (index === 9999) {
-        // External SRT/VTT track
-        if (externalSubTrack) {
-            for (let i = 0; i < tracks.length; i++) tracks[i].mode = "disabled";
-            externalSubTrack.mode = "showing";
-        }
-        return;
-    }
-
-    // Embedded track
-    for (let i = 0; i < tracks.length; i++) {
-        tracks[i].mode = (i === index) ? "showing" : "disabled";
-    }
-}
-
-function hideCueDisplay() {
-    const tracks = video.textTracks;
-    for (let i = 0; i < tracks.length; i++) tracks[i].mode = "disabled";
-}
-
-// ======================================
-// ===== EXTERNAL SRT / VTT UPLOAD =====
-// ======================================
-
-srtUpload.addEventListener("change", function() {
-    const file = this.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const content = e.target.result;
-        let vttContent;
-
-        if (file.name.toLowerCase().endsWith(".srt")) {
-            vttContent = srtToVtt(content);
-        } else {
-            vttContent = content; // already VTT
-        }
-
-        // Remove previous external track element if any
-        const old = document.getElementById("externalTrackEl");
-        if (old) old.remove();
-
-        const blob = new Blob([vttContent], { type: "text/vtt" });
-        const url  = URL.createObjectURL(blob);
-
-        const trackEl = document.createElement("track");
-        trackEl.id    = "externalTrackEl";
-        trackEl.kind  = "subtitles";
-        trackEl.label = file.name;
-        trackEl.src   = url;
-        video.appendChild(trackEl);
-
-        // Wait for track to load
-        trackEl.addEventListener("load", () => {
-            externalSubTrack = video.textTracks[video.textTracks.length - 1];
-
-            // Remove old external row if present
-            const oldRow = document.getElementById("extSubRow");
-            if (oldRow) oldRow.remove();
-
-            // Add row
-            const row = document.createElement("div");
-            row.className = "sub-row";
-            row.id = "extSubRow";
-            row.dataset.track = "9999";
-            row.onclick = () => selectSubtitle(row, 9999);
-            row.innerHTML = `
-                <div class="sub-dot"></div>
-                <span class="sub-label">${escHtml(file.name)}</span>
-                <span class="sub-badge" style="background:#1a3a2a;color:#4ade80;">ext</span>`;
-            subtitleList.appendChild(row);
-
-            // Auto-select the uploaded track
-            selectSubtitle(row, 9999);
-        });
-    };
-    reader.readAsText(file);
-    this.value = ""; // reset so same file can be re-uploaded
-});
-
-// Simple SRT → VTT converter
+/* ─── SRT → WebVTT converter ─── */
 function srtToVtt(srt) {
-    let vtt = "WEBVTT\n\n";
-    vtt += srt
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2")
-        .trim();
-    return vtt;
+  // Normalise line endings
+  let text = srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  // Replace SRT timestamp commas with dots  00:00:01,000 → 00:00:01.000
+  text = text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+
+  // Strip cue indices (lines that are just a number on their own)
+  text = text.replace(/^\d+\s*\n/gm, '');
+
+  return 'WEBVTT\n\n' + text;
 }
 
-// ======================================
-// ===== AUDIO TRACK DETECTION =====
-// ======================================
-
-function buildAudioUI() {
-    audioList.innerHTML = "";
-
-    // AudioTrackList API (supported in some browsers)
-    const audioTracks = video.audioTracks;
-
-    if (!audioTracks || audioTracks.length === 0) {
-        audioList.innerHTML = '<div class="no-tracks">No multiple audio tracks detected</div>';
-        return;
-    }
-
-    for (let i = 0; i < audioTracks.length; i++) {
-        const t = audioTracks[i];
-        const label = t.label || t.language || ("Track " + (i + 1));
-        const lang  = t.language || "";
-
-        const row = document.createElement("div");
-        row.className = "audio-row" + (t.enabled ? " active" : "");
-        row.dataset.idx = i;
-        row.onclick = () => selectAudio(i);
-        row.innerHTML = `
-            <div class="audio-dot"></div>
-            <span class="audio-label">${escHtml(label)}${lang && lang !== label ? " ["+escHtml(lang)+"]" : ""}</span>`;
-        audioList.appendChild(row);
-    }
+/* ─── Toast helper ─── */
+let toastTimer;
+function showToast(msg) {
+  ccToast.textContent = msg;
+  ccToast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ccToast.classList.remove('show'), 3000);
 }
 
-function selectAudio(idx) {
-    const audioTracks = video.audioTracks;
-    if (!audioTracks) return;
+/* ─────────────── PLAYER CORE ─────────────── */
 
-    for (let i = 0; i < audioTracks.length; i++) {
-        audioTracks[i].enabled = (i === idx);
-    }
+/* Play Pause */
+playPause.onclick = () => {
+  if (video.paused) { video.play(); playPause.textContent = "❚❚"; }
+  else              { video.pause(); playPause.textContent = "▶"; }
+};
 
-    // Update UI
-    audioList.querySelectorAll(".audio-row").forEach((r, i) => {
-        r.classList.toggle("active", i === idx);
-    });
+/* Loader */
+video.onwaiting = () => loader.style.display = "block";
+video.onplaying = () => loader.style.display = "none";
+
+/* Time Update */
+video.ontimeupdate = () => {
+  played.style.width = (video.currentTime / video.duration * 100) + "%";
+  current.textContent = format(video.currentTime);
+};
+video.onloadedmetadata = () => duration.textContent = format(video.duration);
+
+function format(t) {
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60).toString().padStart(2, "0");
+  return m + ":" + s;
 }
 
-// ======================================
-// ===== UTILS =====
-// ======================================
+/* Buffered */
+video.onprogress = () => {
+  if (video.buffered.length > 0) {
+    const end = video.buffered.end(video.buffered.length - 1);
+    buffered.style.width = (end / video.duration * 100) + "%";
+  }
+};
 
-function escHtml(str) {
-    return String(str)
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;");
+/* Seek */
+progress.onclick = (e) => {
+  const rect = progress.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  video.currentTime = (x / rect.width) * video.duration;
+};
+
+/* Volume */
+volume.oninput = () => video.volume = volume.value;
+mute.onclick = () => {
+  video.muted = !video.muted;
+  mute.textContent = video.muted ? "🔇" : "🔊";
+};
+
+/* Speed */
+speed.onchange = () => video.playbackRate = speed.value;
+
+/* Fullscreen */
+fullscreen.onclick = () => {
+  if (!document.fullscreenElement) player.requestFullscreen();
+  else document.exitFullscreen();
+};
+
+/* PiP */
+pip.onclick = async () => {
+  if (document.pictureInPictureElement) document.exitPictureInPicture();
+  else await video.requestPictureInPicture();
+};
+
+/* Keyboard */
+document.onkeydown = (e) => {
+  if (e.code === "Space")       { e.preventDefault(); playPause.click(); }
+  if (e.code === "ArrowRight")  video.currentTime += 10;
+  if (e.code === "ArrowLeft")   video.currentTime -= 10;
+  if (e.code === "KeyC")        ccBtn.click();   // 'C' key toggles CC
+};
+
+/* Auto Hide Controls */
+function showControls() {
+  controls.classList.remove("hide");
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => controls.classList.add("hide"), 3000);
+}
+player.onmousemove = showControls;
+video.onplay = showControls;
+
+/* 60s Forward Buffer */
+function ensureForwardBuffer() {
+  if (video.buffered.length > 0) {
+    const end = video.buffered.end(video.buffered.length - 1);
+    if ((end - video.currentTime) < 60 && end < video.duration) {
+      video.preload = "auto";
+    }
+  }
+}
+setInterval(ensureForwardBuffer, 4000);
+
+/* Double Tap 10s Seek */
+const seekLeft  = document.getElementById("seekLeft");
+const seekRight = document.getElementById("seekRight");
+let lastTap = 0;
+
+player.addEventListener("click", function(e) {
+  let now = Date.now();
+  let tapGap = now - lastTap;
+
+  if (tapGap < 300 && tapGap > 0) {
+    const rect = player.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    if (x < rect.width / 2) {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      animateSeek(seekLeft);
+    } else {
+      video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      animateSeek(seekRight);
+    }
+    video.play();
+  }
+  lastTap = now;
+});
+
+function animateSeek(el) {
+  el.classList.add("seek-show");
+  setTimeout(() => el.classList.remove("seek-show"), 350);
 }
 </script>
+
 </body>
 </html>
 """
@@ -1021,11 +608,7 @@ def stream_video():
                 yield chunk
         upstream.close()
 
-    return Response(
-        generate(),
-        status=upstream.status_code,
-        headers=dict(upstream.headers)
-    )
+    return Response(generate(), status=upstream.status_code, headers=dict(upstream.headers))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
