@@ -49,6 +49,7 @@ button{background:none;border:none;color:white;font-size:18px;margin:4px;cursor:
 .settingsMenu div{padding:12px 16px;font-size:16px;color:white;display:flex;align-items:center;gap:8px;cursor:pointer;}
 .settingsMenu div:hover{background:#ef4444;border-radius:8px;transition:0.2s;}
 .audioMenu,.subMenu,.speedMenu{display:none;flex-direction:column;background:rgba(0,0,0,0.9);border-radius:8px;padding:8px;gap:4px;}
+.timeDisplay{display:flex;justify-content:space-between;color:white;font-size:14px;margin-bottom:4px;}
 </style>
 </head>
 <body>
@@ -57,14 +58,20 @@ button{background:none;border:none;color:white;font-size:18px;margin:4px;cursor:
 <div class="center" id="center">▶</div>
 
 <div class="controls" id="controls">
+
+<!-- Current / Total Time -->
+<div class="timeDisplay">
+    <span id="currentTime">00:00</span>
+    <span id="totalTime">00:00</span>
+</div>
+
 <div class="progress" id="progress">
 <div class="buffer" id="buffer"></div>
 <div class="played" id="played"></div>
 </div>
-<div style="display:flex;flex-wrap:wrap;">
+
+<div style="display:flex;flex-wrap:wrap;align-items:center;">
 <button id="play">▶</button>
-<button id="back60">⏪60</button>
-<button id="fwd60">60⏩</button>
 <button id="mute">🔊</button>
 <button id="settingsBtn">⚙</button>
 <button id="pip">PiP</button>
@@ -101,8 +108,6 @@ const buffer=document.getElementById("buffer")
 const mute=document.getElementById("mute")
 const fs=document.getElementById("fs")
 const pip=document.getElementById("pip")
-const back60=document.getElementById("back60")
-const fwd60=document.getElementById("fwd60")
 const player=document.getElementById("player")
 
 const settingsBtn=document.getElementById("settingsBtn")
@@ -115,22 +120,30 @@ const subOpen=document.getElementById("subOpen")
 const speedMenu=document.getElementById("speedMenu")
 const speedOpen=document.getElementById("speedOpen")
 const subFile=document.getElementById("subFile")
+const currentTimeSpan=document.getElementById("currentTime")
+const totalTimeSpan=document.getElementById("totalTime")
 
-// Play / Pause
 function toggle(){
 if(video.paused){video.play();play.textContent="❚❚";center.style.display="none"}
 else{video.pause();play.textContent="▶";center.style.display="block"}}
 play.onclick=toggle
 center.onclick=toggle
 
-// Progress
-video.ontimeupdate=()=>{if(video.duration)played.style.width=(video.currentTime/video.duration*100)+"%"}
-video.onprogress=()=>{if(video.buffered.length){let end=video.buffered.end(video.buffered.length-1);buffer.style.width=(end/video.duration*100)+"%"}}
-progress.onclick=e=>{let r=progress.getBoundingClientRect();let x=e.clientX-r.left;video.currentTime=(x/r.width)*video.duration}
+function formatTime(sec){
+let m=Math.floor(sec/60)
+let s=Math.floor(sec%60)
+return (m<10?'0':'')+m+':'+(s<10?'0':'')+s
+}
 
-// 60s skip buttons
-back60.onclick=()=>video.currentTime-=60
-fwd60.onclick=()=>video.currentTime+=60
+// Progress + time update
+video.ontimeupdate=()=>{
+if(video.duration){
+played.style.width=(video.currentTime/video.duration*100)+"%"
+currentTimeSpan.textContent=formatTime(video.currentTime)
+totalTimeSpan.textContent=formatTime(video.duration)
+}}
+
+video.onprogress=()=>{if(video.buffered.length){let end=video.buffered.end(video.buffered.length-1);buffer.style.width=(end/video.duration*100)+"%"}}
 
 // Mute
 mute.onclick=()=>{video.muted=!video.muted;mute.textContent=video.muted?"🔇":"🔊"}
