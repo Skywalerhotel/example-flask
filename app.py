@@ -10,8 +10,7 @@ HOME_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>stream proxy player</title>
-
+<title>Pasan Ultra Player</title>
 <style>
 body{
 margin:0;
@@ -22,13 +21,17 @@ align-items:center;
 background:linear-gradient(135deg,#0f172a,#1e293b);
 font-family:Arial;
 }
+/* Liquid Glass Card */
 .card{
-background:#111827;
+background: rgba(255,255,255,0.05);
+backdrop-filter: blur(12px) saturate(180%);
+-webkit-backdrop-filter: blur(12px) saturate(180%);
 padding:30px;
 border-radius:16px;
 width:90%;
 max-width:500px;
 box-shadow:0 10px 30px rgba(0,0,0,0.4);
+color:white;
 }
 h2{
 color:white;
@@ -40,7 +43,10 @@ width:100%;
 padding:12px;
 border:none;
 border-radius:10px;
-background:#1f2937;
+background: rgba(255,255,255,0.05);
+backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px);
+border:1px solid rgba(255,255,255,0.2);
 color:white;
 margin-bottom:15px;
 }
@@ -49,10 +55,18 @@ width:100%;
 padding:12px;
 border:none;
 border-radius:10px;
-background:#2563eb;
+background: rgba(255,255,255,0.1);
+backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px);
+border:1px solid rgba(255,255,255,0.2);
 color:white;
 font-weight:bold;
 cursor:pointer;
+transition:0.3s;
+}
+button:hover{
+background: rgba(255,255,255,0.2);
+transform:scale(1.05);
 }
 </style>
 </head>
@@ -75,7 +89,7 @@ VIDEO_PLAYER_HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pasan Ultra Player</title>
+<title>Pasan Ultra Player MAX</title>
 
 <style>
 body{
@@ -123,18 +137,25 @@ display:none;
 100%{transform:translate(-50%,-50%) rotate(360deg)}
 }
 
-/* controls */
+/* controls - Liquid Glass */
 .controls{
 position:absolute;
-bottom:0;
-width:100%;
-background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
+bottom:15px;
+left:50%;
+transform:translateX(-50%);
+width:95%;
+max-width:1100px;
+background: rgba(255,255,255,0.05);
+backdrop-filter: blur(12px) saturate(180%);
+-webkit-backdrop-filter: blur(12px) saturate(180%);
+border-radius:20px;
 padding:15px;
-transition:0.3s;
+box-shadow:0 8px 32px rgba(0,0,0,0.4);
+transition:0.3s ease;
 }
 .progress{
 height:6px;
-background:#374151;
+background: rgba(255,255,255,0.1);
 border-radius:5px;
 cursor:pointer;
 position:relative;
@@ -143,14 +164,16 @@ margin-bottom:12px;
 .buffered{
 position:absolute;
 height:100%;
-background:#6b7280;
+background: rgba(255,255,255,0.2);
 width:0%;
+border-radius:5px;
 }
 .played{
 position:absolute;
 height:100%;
 background:linear-gradient(90deg,#ef4444,#f97316);
 width:0%;
+border-radius:5px;
 }
 .row{
 display:flex;
@@ -158,22 +181,29 @@ justify-content:space-between;
 align-items:center;
 }
 button,select{
-background:none;
-border:none;
+background: rgba(255,255,255,0.1);
+border-radius:12px;
+padding:8px 12px;
+backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px);
+border:1px solid rgba(255,255,255,0.2);
 color:white;
-font-size:16px;
+font-weight:bold;
 cursor:pointer;
+transition:0.3s;
 margin-right:8px;
 }
 button:hover{
-transform:scale(1.15);
-transition:0.2s;
+background: rgba(255,255,255,0.2);
+transform:scale(1.05);
+}
+input[type=range]{
+accent-color:#ef4444;
 }
 .time{
 color:white;
 font-size:14px;
 }
-
 /* Pasan Title Old CSS */
 .title{
 font-family: 'Poppins', sans-serif;
@@ -298,9 +328,7 @@ const seekLeft=document.getElementById("seekLeft")
 const seekRight=document.getElementById("seekRight")
 
 /* play/pause */
-playPause.onclick=()=>{
-if(video.paused){video.play(); playPause.textContent="❚❚"}else{video.pause(); playPause.textContent="⏵"}
-}
+playPause.onclick=()=>{if(video.paused){video.play();playPause.textContent="❚❚"}else{video.pause();playPause.textContent="⏵"}}
 /* loader */
 video.onwaiting=()=>loader.style.display="block"
 video.onplaying=()=>loader.style.display="none"
@@ -309,44 +337,49 @@ video.ontimeupdate=()=>{
 if(video.duration){played.style.width=(video.currentTime/video.duration*100)+"%"}
 current.textContent=format(video.currentTime)
 }
+/* duration */
 video.onloadedmetadata=()=>duration.textContent=format(video.duration)
-function format(t){const m=Math.floor(t/60);const s=Math.floor(t%60).toString().padStart(2,"0"); return m+":"+s}
+function format(t){const m=Math.floor(t/60);const s=Math.floor(t%60).toString().padStart(2,"0");return m+":"+s}
+
+/* buffered progress */
+video.onprogress=()=>{
+if(video.buffered.length>0){
+const bufferedEnd = video.buffered.end(video.buffered.length-1)
+const duration = video.duration || 0
+buffered.style.width = ((bufferedEnd/duration)*100)+"%"
+}
+}
 
 /* progress click */
-progress.onclick=e=>{
-const rect=progress.getBoundingClientRect()
-video.currentTime=video.duration*((e.clientX-rect.left)/rect.width)
-}
+progress.onclick=e=>{const rect=progress.getBoundingClientRect(); video.currentTime=video.duration*((e.clientX-rect.left)/rect.width)}
 
 /* mute */
-mute.onclick=()=>{
-video.muted=!video.muted
-mute.textContent=video.muted?"🔇":"🔊"
-}
+mute.onclick=()=>{video.muted=!video.muted; mute.textContent=video.muted?"🔇":"🔊"}
 /* speed */
 speed.onchange=()=>video.playbackRate=speed.value
 /* fullscreen */
-fullscreen.onclick=()=>{
-if(!document.fullscreenElement){player.requestFullscreen()}else{document.exitFullscreen()}
-}
+fullscreen.onclick=()=>{if(!document.fullscreenElement){player.requestFullscreen()}else{document.exitFullscreen()}}
 /* pip */
-pip.onclick=async()=>{
-if(document.pictureInPictureElement){document.exitPictureInPicture()}else{await video.requestPictureInPicture()}
-}
+pip.onclick=async()=>{if(document.pictureInPictureElement){document.exitPictureInPicture()}else{await video.requestPictureInPicture()}}
+
 /* subtitles */
 ccBtn.onclick=()=>subtitleFile.click()
 subtitleFile.onchange=function(){
 const file=this.files[0]
+if(!file) return
 const reader=new FileReader()
 reader.onload=function(){
-const srt=reader.result
-const vtt="WEBVTT\\n\\n"+srt.replace(/\\r+/g,"")
-.replace(/(\\d+)\\n(\\d{2}:\\d{2}:\\d{2}),/g,"$1\\n$2.")
-.replace(/ --> (\\d{2}:\\d{2}:\\d{2}),/g," --> $1.")
+const oldTrack=video.querySelector("track")
+if(oldTrack) video.removeChild(oldTrack)
+let srt=reader.result
+let vtt="WEBVTT\n\n"+srt.replace(/\r+/g,'')
+.replace(/(\d+)\n(\d{2}:\d{2}:\d{2}),(\d{3}) --> (\d{2}:\d{2}:\d{2}),(\d{3})/g,"$2.$3 --> $4.$5")
 const blob=new Blob([vtt],{type:"text/vtt"})
 const url=URL.createObjectURL(blob)
 const track=document.createElement("track")
 track.kind="subtitles"
+track.label="English"
+track.srclang="en"
 track.src=url
 track.default=true
 video.appendChild(track)
@@ -359,15 +392,14 @@ let lastTap=0
 player.addEventListener("click",e=>{
 let now=Date.now()
 if(now-lastTap<300){
-if(e.clientX<window.innerWidth/2){video.currentTime-=10;animate(seekLeft)}
-else{video.currentTime+=10;animate(seekRight)}
+if(e.clientX<window.innerWidth/2){video.currentTime=Math.max(0,video.currentTime-10);animate(seekLeft)}
+else{video.currentTime=Math.min(video.duration,video.currentTime+10);animate(seekRight)}
 }
 lastTap=now
 })
 function animate(el){el.classList.add("seek-show"); setTimeout(()=>el.classList.remove("seek-show"),300)}
 
 </script>
-
 </body>
 </html>
 """
