@@ -476,7 +476,7 @@ const video         = document.getElementById("video");
 const player        = document.getElementById("player");
 const loader        = document.getElementById("loader");
 const controls      = document.getElementById("controls");
-const progress      = document.getElementById("progress");
+const progressBar   = document.getElementById("progress");
 const played        = document.getElementById("played");
 const bufferedEl    = document.getElementById("buffered");
 const playPause     = document.getElementById("playPause");
@@ -492,207 +492,234 @@ const settingsPanel = document.getElementById("settingsPanel");
 const srtUpload     = document.getElementById("srtUpload");
 const subtitleList  = document.getElementById("subtitleList");
 const audioList     = document.getElementById("audioList");
+const seekLeft      = document.getElementById("seekLeft");
+const seekRight     = document.getElementById("seekRight");
 
-// ===== PLAY / PAUSE =====
-playPause.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (video.paused) { video.play(); }
-    else { video.pause(); }
-});
+// ===========================
+// PLAY / PAUSE BUTTON
+// ===========================
+playPause.onclick = function() {
+    if (video.paused) video.play();
+    else video.pause();
+};
+video.addEventListener("play",  function() { playPause.textContent = "❚❚"; });
+video.addEventListener("pause", function() { playPause.textContent = "▶"; });
 
-// Sync button icon with actual video state
-video.addEventListener("play",  () => { playPause.textContent = "❚❚"; });
-video.addEventListener("pause", () => { playPause.textContent = "▶"; });
+// ===========================
+// LOADER SPINNER
+// ===========================
+video.addEventListener("waiting", function() { loader.style.display = "block"; });
+video.addEventListener("playing", function() { loader.style.display = "none"; });
+video.addEventListener("canplay", function() { loader.style.display = "none"; });
 
-// ===== LOADER =====
-video.addEventListener("waiting", () => loader.style.display = "block");
-video.addEventListener("playing", () => loader.style.display = "none");
-video.addEventListener("canplay", () => loader.style.display = "none");
-
-// ===== PROGRESS / TIME =====
-video.addEventListener("timeupdate", () => {
-    if (!isNaN(video.duration)) {
-        played.style.width = (video.currentTime / video.duration * 100) + "%";
-    }
-    currentEl.textContent = format(video.currentTime);
-});
-
-video.addEventListener("loadedmetadata", () => {
-    durationEl.textContent = format(video.duration);
-    detectTracks();
-});
-
-function format(t) {
-    if (isNaN(t)) return "0:00";
-    const m = Math.floor(t / 60);
-    const s = Math.floor(t % 60).toString().padStart(2, "0");
+// ===========================
+// TIME / PROGRESS
+// ===========================
+function fmt(t) {
+    if (!t || isNaN(t)) return "0:00";
+    var m = Math.floor(t / 60);
+    var s = Math.floor(t % 60).toString().padStart(2, "0");
     return m + ":" + s;
 }
 
-video.addEventListener("progress", () => {
-    if (video.buffered.length > 0) {
-        const end = video.buffered.end(video.buffered.length - 1);
-        if (!isNaN(video.duration)) {
-            bufferedEl.style.width = (end / video.duration * 100) + "%";
-        }
+video.addEventListener("timeupdate", function() {
+    if (video.duration) {
+        played.style.width = (video.currentTime / video.duration * 100) + "%";
+        currentEl.textContent = fmt(video.currentTime);
     }
 });
 
-// ===== SEEK BAR =====
-progress.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const rect = progress.getBoundingClientRect();
-    video.currentTime = ((e.clientX - rect.left) / rect.width) * video.duration;
+video.addEventListener("loadedmetadata", function() {
+    durationEl.textContent = fmt(video.duration);
+    detectTracks();
 });
 
-// ===== VOLUME =====
-volumeEl.addEventListener("input", (e) => {
-    e.stopPropagation();
-    video.volume = volumeEl.value;
-    video.muted = (volumeEl.value == 0);
-    muteBtn.textContent = (video.muted || video.volume === 0) ? "🔇" : "🔊";
+video.addEventListener("progress", function() {
+    if (video.buffered.length && video.duration) {
+        var end = video.buffered.end(video.buffered.length - 1);
+        bufferedEl.style.width = (end / video.duration * 100) + "%";
+    }
 });
 
-muteBtn.addEventListener("click", (e) => {
+// ===========================
+// SEEK BAR
+// ===========================
+progressBar.addEventListener("mousedown", function(e) {
     e.stopPropagation();
+    seekTo(e);
+    document.addEventListener("mousemove", seekTo);
+    document.addEventListener("mouseup", function up() {
+        document.removeEventListener("mousemove", seekTo);
+        document.removeEventListener("mouseup", up);
+    });
+});
+
+function seekTo(e) {
+    var rect = progressBar.getBoundingClientRect();
+    var x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    video.currentTime = (x / rect.width) * video.duration;
+}
+
+// ===========================
+// VOLUME
+// ===========================
+muteBtn.onclick = function() {
     video.muted = !video.muted;
     muteBtn.textContent = video.muted ? "🔇" : "🔊";
-    if (!video.muted) volumeEl.value = video.volume || 1;
-});
+};
 
-// ===== SPEED =====
-speedEl.addEventListener("change", (e) => {
-    e.stopPropagation();
-    video.playbackRate = speedEl.value;
-});
+volumeEl.oninput = function() {
+    video.volume = parseFloat(volumeEl.value);
+    video.muted = (video.volume === 0);
+    muteBtn.textContent = video.muted ? "🔇" : "🔊";
+};
 
-// ===== FULLSCREEN =====
-fullscreenBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
+// ===========================
+// SPEED
+// ===========================
+speedEl.onchange = function() {
+    video.playbackRate = parseFloat(speedEl.value);
+};
+
+// ===========================
+// FULLSCREEN
+// ===========================
+fullscreenBtn.onclick = function() {
     if (!document.fullscreenElement) player.requestFullscreen();
     else document.exitFullscreen();
-});
+};
 
-// ===== PiP =====
-pipBtn.addEventListener("click", async (e) => {
-    e.stopPropagation();
+// ===========================
+// PiP
+// ===========================
+pipBtn.onclick = async function() {
     try {
         if (document.pictureInPictureElement) document.exitPictureInPicture();
         else await video.requestPictureInPicture();
-    } catch(err) { console.warn("PiP error:", err); }
+    } catch(e) {}
+};
+
+// ===========================
+// KEYBOARD
+// ===========================
+document.addEventListener("keydown", function(e) {
+    var tag = document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (e.code === "Space")      { e.preventDefault(); playPause.onclick(); }
+    if (e.code === "ArrowRight") { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 10); }
+    if (e.code === "ArrowLeft")  { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
+    if (e.code === "KeyM")       { muteBtn.onclick(); }
+    if (e.code === "KeyF")       { fullscreenBtn.onclick(); }
 });
 
-// ===== KEYBOARD =====
-document.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-    if (e.code === "Space")       { e.preventDefault(); playPause.click(); }
-    if (e.code === "ArrowRight")  { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 10); }
-    if (e.code === "ArrowLeft")   { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
-    if (e.code === "KeyM")        { muteBtn.click(); }
-    if (e.code === "KeyF")        { fullscreenBtn.click(); }
-});
-
-// ===== AUTO HIDE CONTROLS =====
-let hideTimer;
-let mouseIdle = false;
+// ===========================
+// AUTO-HIDE CONTROLS
+// ===========================
+var hideTimer = null;
 
 function showControls() {
     controls.classList.remove("hide");
     clearTimeout(hideTimer);
-    // Only hide if settings panel is closed
-    hideTimer = setTimeout(() => {
-        if (!settingsPanel.classList.contains("open") && !video.paused) {
+    if (!video.paused && !settingsPanel.classList.contains("open")) {
+        hideTimer = setTimeout(function() {
             controls.classList.add("hide");
-        }
-    }, 3000);
+        }, 3000);
+    }
 }
 
-function cancelHide() {
-    clearTimeout(hideTimer);
+function keepControls() {
     controls.classList.remove("hide");
+    clearTimeout(hideTimer);
 }
 
 player.addEventListener("mousemove", showControls);
-player.addEventListener("mouseleave", () => {
-    if (!settingsPanel.classList.contains("open") && !video.paused) {
-        hideTimer = setTimeout(() => controls.classList.add("hide"), 1000);
+player.addEventListener("mouseleave", function() {
+    if (!video.paused && !settingsPanel.classList.contains("open")) {
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function() { controls.classList.add("hide"); }, 1500);
+    }
+});
+video.addEventListener("pause", keepControls);
+video.addEventListener("play",  showControls);
+
+// ===========================
+// DOUBLE-TAP SEEK on player overlay
+// — separate transparent div sits over video, under controls
+// ===========================
+var tapTimer   = null;
+var tapCount   = 0;
+var tapX       = 0;
+
+// Use the player div but skip if target is inside controls or settings
+player.addEventListener("click", function(e) {
+    // ignore clicks that originate from controls or settings panel
+    if (controls.contains(e.target)) return;
+    if (settingsPanel.contains(e.target)) return;
+
+    tapCount++;
+    tapX = e.clientX;
+
+    if (tapCount === 1) {
+        tapTimer = setTimeout(function() {
+            // single tap — toggle play/pause
+            if (video.paused) video.play();
+            else video.pause();
+            tapCount = 0;
+        }, 250);
+    } else if (tapCount === 2) {
+        clearTimeout(tapTimer);
+        tapCount = 0;
+        // double tap — seek
+        var rect = player.getBoundingClientRect();
+        if (tapX - rect.left < rect.width / 2) {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            flash(seekLeft);
+        } else {
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            flash(seekRight);
+        }
     }
 });
 
-// Keep controls visible when paused
-video.addEventListener("pause", cancelHide);
-video.addEventListener("play",  showControls);
+function flash(el) {
+    el.classList.add("seek-show");
+    setTimeout(function() { el.classList.remove("seek-show"); }, 500);
+}
 
-// ===== FORWARD BUFFER =====
-setInterval(() => {
-    if (video.buffered.length > 0) {
-        const end = video.buffered.end(video.buffered.length - 1);
+// ===========================
+// SETTINGS PANEL
+// ===========================
+settingsBtn.onclick = function(e) {
+    e.stopPropagation();
+    var open = settingsPanel.classList.toggle("open");
+    settingsBtn.classList.toggle("open", open);
+    if (open) keepControls();
+    else showControls();
+};
+
+document.addEventListener("click", function(e) {
+    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+        if (settingsPanel.classList.contains("open")) {
+            settingsPanel.classList.remove("open");
+            settingsBtn.classList.remove("open");
+            showControls();
+        }
+    }
+});
+
+settingsPanel.addEventListener("click", function(e) { e.stopPropagation(); });
+
+// ===========================
+// FORWARD BUFFER
+// ===========================
+setInterval(function() {
+    if (video.buffered.length > 0 && video.duration) {
+        var end = video.buffered.end(video.buffered.length - 1);
         if ((end - video.currentTime) < 60 && end < video.duration) {
             video.preload = "auto";
         }
     }
 }, 4000);
-
-// ===== DOUBLE TAP / CLICK ON VIDEO AREA =====
-const seekLeft  = document.getElementById("seekLeft");
-const seekRight = document.getElementById("seekRight");
-let lastTap = 0;
-
-// Only attach to the video element itself, not the whole player
-video.addEventListener("click", function(e) {
-    const now = Date.now();
-    const tapGap = now - lastTap;
-
-    if (tapGap < 300 && tapGap > 0) {
-        // Double tap — seek
-        const rect = video.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        if (x < rect.width / 2) {
-            video.currentTime = Math.max(0, video.currentTime - 10);
-            animateSeek(seekLeft);
-        } else {
-            video.currentTime = Math.min(video.duration, video.currentTime + 10);
-            animateSeek(seekRight);
-        }
-    } else {
-        // Single tap — toggle play/pause
-        if (video.paused) video.play();
-        else video.pause();
-    }
-    lastTap = now;
-});
-
-function animateSeek(el) {
-    el.classList.add("seek-show");
-    setTimeout(() => el.classList.remove("seek-show"), 350);
-}
-
-// ======================================
-// ===== SETTINGS PANEL =====
-// ======================================
-
-settingsBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = settingsPanel.classList.toggle("open");
-    settingsBtn.classList.toggle("open", isOpen);
-    if (isOpen) cancelHide();  // keep controls visible while settings open
-    else showControls();
-});
-
-// Close settings when clicking outside the panel
-document.addEventListener("click", (e) => {
-    if (settingsPanel.classList.contains("open") &&
-        !settingsPanel.contains(e.target) &&
-        e.target !== settingsBtn) {
-        settingsPanel.classList.remove("open");
-        settingsBtn.classList.remove("open");
-        showControls();
-    }
-});
-
-// Prevent clicks inside settings panel from bubbling to player/video
-settingsPanel.addEventListener("click", (e) => e.stopPropagation());
-controls.addEventListener("click", (e) => e.stopPropagation());
 
 // ======================================
 // ===== SUBTITLE TRACK DETECTION =====
