@@ -130,7 +130,8 @@ video{
     background:linear-gradient(to top,rgba(0,0,0,0.92),transparent);
     padding:15px;
     transition:opacity 0.3s;
-    z-index:10;
+    z-index:30;
+    touch-action:manipulation;
 }
 .hide{opacity:0; pointer-events:none;}
 
@@ -267,7 +268,7 @@ input[type=range]{
     border:1px solid #1f2937;
     border-radius:14px;
     box-shadow:0 8px 32px rgba(0,0,0,0.7);
-    z-index:20;
+    z-index:40;
     overflow:hidden;
     transform-origin:bottom right;
     transform:scale(0.85);
@@ -402,6 +403,15 @@ input[type=range]{
 .player:fullscreen{ width:100% !important; height:100% !important; border-radius:0 !important; }
 .player:fullscreen video{ width:100%; height:100%; }
 
+/* Tap overlay — covers video only, sits below controls */
+#tapOverlay{
+    position:absolute;
+    top:0; left:0; right:0; bottom:0;
+    z-index:2;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+}
+
 /* Seek indicator */
 .seek-indicator{
     position:absolute;
@@ -430,6 +440,7 @@ input[type=range]{
     autoplay preload="auto"></video>
 
 <div class="loader" id="loader"></div>
+<div id="tapOverlay"></div>
 <div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
 <div class="seek-indicator right" id="seekRight">10s ⏩</div>
 
@@ -595,12 +606,12 @@ progressBar.addEventListener("touchmove", function(e) {
 }, { passive: true });
 
 // ===========================
-// DOUBLE-TAP SEEK — touchend (mobile) + click (desktop)
+// DOUBLE-TAP SEEK — on tapOverlay only, never touches controls
 // ===========================
-var tapTimer  = null;
-var tapCount  = 0;
-var tapX      = 0;
-var lastTouch = 0;
+var tapOverlay = document.getElementById("tapOverlay");
+var tapTimer   = null;
+var tapCount   = 0;
+var tapX       = 0;
 
 function handleTap(clientX) {
     tapCount++;
@@ -614,7 +625,7 @@ function handleTap(clientX) {
     } else if (tapCount >= 2) {
         clearTimeout(tapTimer);
         tapCount = 0;
-        var rect = player.getBoundingClientRect();
+        var rect = tapOverlay.getBoundingClientRect();
         if (tapX - rect.left < rect.width / 2) {
             video.currentTime = Math.max(0, video.currentTime - 10);
             flash(seekLeft);
@@ -625,20 +636,13 @@ function handleTap(clientX) {
     }
 }
 
-// Mobile: use touchend — instant, no 300ms delay
-player.addEventListener("touchend", function(e) {
-    if (controls.contains(e.target))      return;
-    if (settingsPanel.contains(e.target)) return;
-    e.preventDefault();
+// Touch — no preventDefault, controls are on a higher z-index layer
+tapOverlay.addEventListener("touchend", function(e) {
     handleTap(e.changedTouches[0].clientX);
-    lastTouch = Date.now();
-}, { passive: false });
+});
 
-// Desktop: click fallback (skip if touch already handled it)
-player.addEventListener("click", function(e) {
-    if (controls.contains(e.target))      return;
-    if (settingsPanel.contains(e.target)) return;
-    if (Date.now() - lastTouch < 600)     return;
+// Desktop mouse click
+tapOverlay.addEventListener("click", function(e) {
     handleTap(e.clientX);
 });
 
