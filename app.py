@@ -73,96 +73,119 @@ VIDEO_PLAYER_HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pasan Video Player</title>
+<title>Pasan Video Player </title>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
 <style>
+
 body{
-    margin:0;
-    background:#0f172a;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    font-family:Arial;
+margin:0;
+background:#0f172a;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+font-family:Arial;
 }
 
 .player{
-    width:95%;
-    max-width:1000px;
-    background:black;
-    border-radius:18px;
-    overflow:hidden;
-    position:relative;
+width:95%;
+max-width:1100px;
+background:black;
+border-radius:18px;
+overflow:hidden;
+position:relative;
 }
 
 video{
-    width:100%;
-    height:auto;
-    display:block;
-    object-fit:contain;
+width:100%;
+height:auto;
+display:block;
+background:black;
 }
 
-/* Loader */
+/* loader */
+
 .loader{
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    width:55px;
-    height:55px;
-    border:5px solid rgba(255,255,255,0.2);
-    border-top:5px solid white;
-    border-radius:50%;
-    animation:spin 1s linear infinite;
-    display:none;
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+width:55px;
+height:55px;
+border:5px solid rgba(255,255,255,0.2);
+border-top:5px solid white;
+border-radius:50%;
+animation:spin 1s linear infinite;
+display:none;
 }
+
 @keyframes spin{
 100%{transform:translate(-50%,-50%) rotate(360deg)}
 }
 
-/* Controls */
+/* controls */
+
 .controls{
-    position:absolute;
-    bottom:0;
-    width:100%;
-    background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
-    padding:15px;
-    box-sizing:border-box;
-    transition:opacity 0.3s;
+position:absolute;
+bottom:0;
+width:100%;
+background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
+padding:15px;
+box-sizing:border-box;
 }
-.hide{opacity:0}
 
 .progress{
-    height:6px;
-    background:#374151;
-    border-radius:5px;
-    cursor:pointer;
-    position:relative;
-    margin-bottom:12px;
+height:6px;
+background:#374151;
+border-radius:5px;
+cursor:pointer;
+position:relative;
+margin-bottom:12px;
 }
+
 .buffered{
-    position:absolute;
-    height:100%;
-    background:#6b7280;
-    width:0%;
-    border-radius:5px;
+position:absolute;
+height:100%;
+background:#6b7280;
+width:0%;
 }
+
 .played{
-    position:absolute;
-    height:100%;
-    background:#ef4444;
-    width:0%;
-    border-radius:5px;
+position:absolute;
+height:100%;
+background:#ef4444;
+width:0%;
 }
 
 .row{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
+display:flex;
+justify-content:space-between;
+align-items:center;
 }
 
+button,select{
+background:none;
+border:none;
+color:white;
+font-size:16px;
+cursor:pointer;
+}
+
+input[type=range]{
+width:80px;
+}
+
+.time{
+font-size:14px;
+color:white;
+}
+
+/* title */
+
 .title{
-    font-family: 'Poppins', sans-serif;
+font-family: 'Poppins', sans-serif;
     font-size: 1.5rem;
     font-weight: 700;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
@@ -172,242 +195,300 @@ video{
     text-align: center;
     position: relative;
 }
-.left,.right{
-    display:flex;
-    align-items:center;
-    gap:12px;
+
+/* subtitle styling */
+
+video::cue{
+font-size:20px;
+color:white;
+background:rgba(0,0,0,0.6);
+padding:4px 8px;
+border-radius:4px;
 }
 
-button,select{
-    background:none;
-    border:none;
-    color:white;
-    font-size:16px;
-    cursor:pointer;
+/* settings panel */
+
+.settings{
+position:absolute;
+right:10px;
+bottom:80px;
+background:#111827;
+color:white;
+padding:12px;
+border-radius:10px;
+display:none;
 }
 
-input[type=range]{
-    width:80px;
+.settings button{
+display:block;
+margin:5px 0;
 }
 
-.time{
-    font-size:14px;
-    color:white;
-}
-
-/* Fullscreen Fix */
-.player:fullscreen{
-    width:100% !important;
-    height:100% !important;
-    border-radius:0 !important;
-}
-.player:fullscreen video{
-    width:100%;
-    height:100%;
-}
-/* Double Tap Seek */
-.seek-indicator{
-    position:absolute;
-    top:50%;
-    transform:translateY(-50%);
-    font-size:38px;
-    color:white;
-    background:rgba(0,0,0,0.5);
-    padding:20px;
-    border-radius:50%;
-    opacity:0;
-    transition:0.25s ease;
-    pointer-events:none;
-}
-.seek-indicator.left{ left:15%; }
-.seek-indicator.right{ right:15%; }
-
-.seek-show{
-    opacity:1;
-    transform:translateY(-50%) scale(1.2);
-}
 </style>
 </head>
 
 <body>
 
 <div class="player" id="player">
+
 <video id="video"
 src="{{ url_for('stream_video', url=video_url_encoded) }}"
 autoplay preload="auto"></video>
 
+<input type="file" id="subtitleFile" accept=".srt" style="display:none">
+
 <div class="loader" id="loader"></div>
-<div class="seek-indicator left" id="seekLeft">⏪ 10s</div>
-<div class="seek-indicator right" id="seekRight">10s ⏩</div>
-<div class="controls" id="controls">
-<div class="title">pasan video player</div>
+
+<div class="controls">
+
+<div class="title">Pasan Video Player</div>
+
 <div class="progress" id="progress">
 <div class="buffered" id="buffered"></div>
 <div class="played" id="played"></div>
 </div>
+
 <div class="row">
+
 <div class="left">
+
 <button id="playPause">▶</button>
+
 <button id="mute">🔊</button>
+
 <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
+
 <span class="time" id="current">0:00</span> /
 <span class="time" id="duration">0:00</span>
+
 </div>
 
 <div class="right">
+
+<button id="ccBtn">CC</button>
+
+<button id="audioBtn">🎵</button>
+
 <select id="speed">
 <option value="0.5">0.5x</option>
 <option value="1" selected>1x</option>
 <option value="1.5">1.5x</option>
 <option value="2">2x</option>
 </select>
+
 <button id="pip">📺</button>
+
 <button id="fullscreen">⛶</button>
+
+<button id="settingsBtn">⚙</button>
+
 </div>
+
 </div>
+
 </div>
+
+<div class="settings" id="settings">
+
+<button id="loadSubtitle">Load Subtitle</button>
+
+<button id="toggleSubtitle">Toggle Subtitle</button>
+
+</div>
+
 </div>
 
 <script>
-const video=document.getElementById("video");
-const player=document.getElementById("player");
-const loader=document.getElementById("loader");
-const controls=document.getElementById("controls");
-const progress=document.getElementById("progress");
-const played=document.getElementById("played");
-const buffered=document.getElementById("buffered");
-const playPause=document.getElementById("playPause");
-const mute=document.getElementById("mute");
-const volume=document.getElementById("volume");
-const speed=document.getElementById("speed");
-const fullscreen=document.getElementById("fullscreen");
-const pip=document.getElementById("pip");
-const current=document.getElementById("current");
-const duration=document.getElementById("duration");
 
-let hideTimer;
+const video=document.getElementById("video")
+const playPause=document.getElementById("playPause")
+const loader=document.getElementById("loader")
+const progress=document.getElementById("progress")
+const played=document.getElementById("played")
+const buffered=document.getElementById("buffered")
+const volume=document.getElementById("volume")
+const mute=document.getElementById("mute")
+const speed=document.getElementById("speed")
+const fullscreen=document.getElementById("fullscreen")
+const pip=document.getElementById("pip")
+const current=document.getElementById("current")
+const duration=document.getElementById("duration")
 
-/* Play Pause */
+const settingsBtn=document.getElementById("settingsBtn")
+const settings=document.getElementById("settings")
+
+const subtitleFile=document.getElementById("subtitleFile")
+const loadSubtitle=document.getElementById("loadSubtitle")
+const toggleSubtitle=document.getElementById("toggleSubtitle")
+
+/* play pause */
+
 playPause.onclick=()=>{
-if(video.paused){video.play();playPause.textContent="❚❚";}
-else{video.pause();playPause.textContent="▶";}
-};
 
-/* Loader */
-video.onwaiting=()=>loader.style.display="block";
-video.onplaying=()=>loader.style.display="none";
+if(video.paused){
+video.play()
+playPause.textContent="❚❚"
+}
+else{
+video.pause()
+playPause.textContent="▶"
+}
 
-/* Time Update */
+}
+
+/* loader */
+
+video.onwaiting=()=>loader.style.display="block"
+video.onplaying=()=>loader.style.display="none"
+
+/* time update */
+
 video.ontimeupdate=()=>{
-played.style.width=(video.currentTime/video.duration*100)+"%";
-current.textContent=format(video.currentTime);
-};
-video.onloadedmetadata=()=>duration.textContent=format(video.duration);
+
+played.style.width=(video.currentTime/video.duration*100)+"%"
+
+current.textContent=format(video.currentTime)
+
+}
+
+video.onloadedmetadata=()=>duration.textContent=format(video.duration)
 
 function format(t){
-const m=Math.floor(t/60);
-const s=Math.floor(t%60).toString().padStart(2,"0");
-return m+":"+s;
+
+const m=Math.floor(t/60)
+
+const s=Math.floor(t%60).toString().padStart(2,"0")
+
+return m+":"+s
+
 }
 
-/* Buffered */
+/* buffered */
+
 video.onprogress=()=>{
-if(video.buffered.length>0){
-const end=video.buffered.end(video.buffered.length-1);
-buffered.style.width=(end/video.duration*100)+"%";
-}
-};
 
-/* Seek */
+if(video.buffered.length>0){
+
+const end=video.buffered.end(video.buffered.length-1)
+
+buffered.style.width=(end/video.duration*100)+"%"
+
+}
+
+}
+
+/* seek */
+
 progress.onclick=(e)=>{
-const rect=progress.getBoundingClientRect();
-const x=e.clientX-rect.left;
-video.currentTime=(x/rect.width)*video.duration;
-};
 
-/* Volume */
-volume.oninput=()=>video.volume=volume.value;
+const rect=progress.getBoundingClientRect()
+
+const x=e.clientX-rect.left
+
+video.currentTime=(x/rect.width)*video.duration
+
+}
+
+/* volume */
+
+volume.oninput=()=>video.volume=volume.value
+
 mute.onclick=()=>{
-video.muted=!video.muted;
-mute.textContent=video.muted?"🔇":"🔊";
-};
 
-/* Speed */
-speed.onchange=()=>video.playbackRate=speed.value;
+video.muted=!video.muted
 
-/* Fullscreen */
+mute.textContent=video.muted?"🔇":"🔊"
+
+}
+
+/* speed */
+
+speed.onchange=()=>video.playbackRate=speed.value
+
+/* fullscreen */
+
 fullscreen.onclick=()=>{
-if(!document.fullscreenElement) player.requestFullscreen();
-else document.exitFullscreen();
-};
 
-/* PiP */
+if(!document.fullscreenElement)
+player.requestFullscreen()
+else
+document.exitFullscreen()
+
+}
+
+/* pip */
+
 pip.onclick=async()=>{
-if(document.pictureInPictureElement) document.exitPictureInPicture();
-else await video.requestPictureInPicture();
-};
 
-/* Keyboard */
-document.onkeydown=(e)=>{
-if(e.code==="Space"){e.preventDefault();playPause.click();}
-if(e.code==="ArrowRight") video.currentTime+=10;
-if(e.code==="ArrowLeft") video.currentTime-=10;
-};
+if(document.pictureInPictureElement)
+document.exitPictureInPicture()
+else
+await video.requestPictureInPicture()
 
-/* Auto Hide Controls */
-function showControls(){
-controls.classList.remove("hide");
-clearTimeout(hideTimer);
-hideTimer=setTimeout(()=>controls.classList.add("hide"),3000);
 }
-player.onmousemove=showControls;
-video.onplay=showControls;
 
-/* ===== 60s Forward Buffer ===== */
-function ensureForwardBuffer(){
-if(video.buffered.length>0){
-const end=video.buffered.end(video.buffered.length-1);
-if((end-video.currentTime)<60 && end<video.duration){
-video.preload="auto";
+/* settings */
+
+settingsBtn.onclick=()=>{
+
+settings.style.display=
+settings.style.display=="block"?"none":"block"
+
 }
+
+/* subtitle load */
+
+loadSubtitle.onclick=()=>subtitleFile.click()
+
+subtitleFile.onchange=function(){
+
+const file=this.files[0]
+
+const reader=new FileReader()
+
+reader.onload=function(){
+
+const srt=reader.result
+
+const vtt="WEBVTT\n\n"+srt
+.replace(/\r+/g,"")
+.replace(/(\d+)\n(\d{2}:\d{2}:\d{2}),/g,"$1\n$2.")
+.replace(/ --> (\d{2}:\d{2}:\d{2}),/g," --> $1.")
+
+const blob=new Blob([vtt],{type:"text/vtt"})
+
+const url=URL.createObjectURL(blob)
+
+const track=document.createElement("track")
+
+track.kind="subtitles"
+track.src=url
+track.default=true
+
+video.appendChild(track)
+
 }
+
+reader.readAsText(file)
+
 }
-setInterval(ensureForwardBuffer,4000);
-/* ===== DOUBLE TAP 10s SEEK ===== */
 
-const seekLeft = document.getElementById("seekLeft");
-const seekRight = document.getElementById("seekRight");
+/* toggle subtitle */
 
-let lastTap = 0;
+toggleSubtitle.onclick=()=>{
 
-player.addEventListener("click", function(e){
+const tracks=video.textTracks
 
-    let now = Date.now();
-    let tapGap = now - lastTap;
+for(let i=0;i<tracks.length;i++){
 
-    if(tapGap < 300 && tapGap > 0){
+tracks[i].mode=
+tracks[i].mode==="showing"?"hidden":"showing"
 
-        const rect = player.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-
-        if(x < rect.width / 2){
-            video.currentTime = Math.max(0, video.currentTime - 10);
-            animateSeek(seekLeft);
-        }else{
-            video.currentTime = Math.min(video.duration, video.currentTime + 10);
-            animateSeek(seekRight);
-        }
-
-        video.play();
-    }
-
-    lastTap = now;
-});
-
-function animateSeek(el){
-    el.classList.add("seek-show");
-    setTimeout(()=> el.classList.remove("seek-show"), 350);
 }
+
+}
+
+
 </script>
 
 </body>
