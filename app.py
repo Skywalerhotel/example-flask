@@ -123,19 +123,13 @@ const subFile=document.getElementById("subFile")
 const currentTimeSpan=document.getElementById("currentTime")
 const totalTimeSpan=document.getElementById("totalTime")
 
-function toggle(){
-if(video.paused){video.play();play.textContent="❚❚";center.style.display="none"}
-else{video.pause();play.textContent="▶";center.style.display="block"}}
+function toggle(){if(video.paused){video.play();play.textContent="❚❚";center.style.display="none"}else{video.pause();play.textContent="▶";center.style.display="block"}}
 play.onclick=toggle
 center.onclick=toggle
 
-function formatTime(sec){
-let m=Math.floor(sec/60)
-let s=Math.floor(sec%60)
-return (m<10?'0':'')+m+':'+(s<10?'0':'')+s
-}
+function formatTime(sec){let m=Math.floor(sec/60);let s=Math.floor(sec%60);return (m<10?'0':'')+m+':'+(s<10?'0':'')+s}
 
-// Progress + time update
+// Update progress and time
 video.ontimeupdate=()=>{
 if(video.duration){
 played.style.width=(video.currentTime/video.duration*100)+"%"
@@ -154,76 +148,47 @@ pip.onclick=async()=>{if(document.pictureInPictureElement)document.exitPictureIn
 // Fullscreen
 fs.onclick=()=>{if(!document.fullscreenElement)player.requestFullscreen();else document.exitFullscreen()}
 
-// Settings Menu
+// Settings
 settingsBtn.onclick=()=>settingsMenu.style.display="flex"
-settingsBack.onclick=()=>{
-settingsMenu.style.display="none";audioMenu.style.display="none";subMenu.style.display="none";speedMenu.style.display="none"}
+settingsBack.onclick=()=>{settingsMenu.style.display="none";audioMenu.style.display="none";subMenu.style.display="none";speedMenu.style.display="none"}
 
 // Audio Tracks
 audioOpen.onclick=()=>{
 audioMenu.style.display="flex";subMenu.style.display="none";speedMenu.style.display="none"
 audioMenu.innerHTML=""
 const tracks=video.audioTracks
-if(tracks && tracks.length){
-for(let i=0;i<tracks.length;i++){
-let div=document.createElement("div")
-div.textContent=tracks[i].label || "Track "+(i+1)
-div.onclick=()=>{for(let j=0;j<tracks.length;j++)tracks[j].enabled=(j===i)}
-audioMenu.appendChild(div)}
-}else{audioMenu.innerHTML="<div>No audio tracks</div>"}}
+if(tracks && tracks.length){for(let i=0;i<tracks.length;i++){let div=document.createElement("div");div.textContent=tracks[i].label||"Track "+(i+1);div.onclick=()=>{for(let j=0;j<tracks.length;j++)tracks[j].enabled=(j===i)};audioMenu.appendChild(div)}}else{audioMenu.innerHTML="<div>No audio tracks</div>"}}
 
 // Subtitles
 subOpen.onclick=()=>{
 subMenu.style.display="flex";audioMenu.style.display="none";speedMenu.style.display="none"
 subMenu.innerHTML=""
-let off=document.createElement("div");off.textContent="Subtitles Off"
-off.onclick=()=>{for(let i=0;i<video.textTracks.length;i++)video.textTracks[i].mode="disabled"}
-subMenu.appendChild(off)
-for(let i=0;i<video.textTracks.length;i++){
-let div=document.createElement("div");div.textContent=video.textTracks[i].label || "Subtitle "+(i+1)
-div.onclick=()=>{for(let j=0;j<video.textTracks.length;j++)video.textTracks[j].mode="disabled";video.textTracks[i].mode="showing"}
-subMenu.appendChild(div)}
-let load=document.createElement("div");load.textContent="Load External Subtitle"
-load.onclick=()=>subFile.click()
-subMenu.appendChild(load)}
+let off=document.createElement("div");off.textContent="Subtitles Off";off.onclick=()=>{for(let i=0;i<video.textTracks.length;i++)video.textTracks[i].mode="disabled"};subMenu.appendChild(off)
+for(let i=0;i<video.textTracks.length;i++){let div=document.createElement("div");div.textContent=video.textTracks[i].label||"Subtitle "+(i+1);div.onclick=()=>{for(let j=0;j<video.textTracks.length;j++)video.textTracks[j].mode="disabled";video.textTracks[i].mode="showing"};subMenu.appendChild(div)}
+let load=document.createElement("div");load.textContent="Load External Subtitle";load.onclick=()=>subFile.click();subMenu.appendChild(load)}
 
 // Speed
 speedOpen.onclick=()=>{speedMenu.style.display="flex";audioMenu.style.display="none";subMenu.style.display="none"}
 speedMenu.querySelectorAll("div").forEach(item=>{item.onclick=()=>{video.playbackRate=item.dataset.speed}})
 
 // External subtitle loader
-subFile.onchange=function(){
-let file=this.files[0];if(!file)return
+subFile.onchange=function(){let file=this.files[0];if(!file)return
 let reader=new FileReader()
-reader.onload=function(){let data=reader.result;if(file.name.endsWith(".srt"))data="WEBVTT\n\n"+data.replace(/,/g,'.')
-let blob=new Blob([data],{type:"text/vtt"});let url=URL.createObjectURL(blob)
-let track=document.createElement("track");track.kind="subtitles";track.src=url;track.default=true;video.appendChild(track)}
-reader.readAsText(file)
-}
+reader.onload=function(){let data=reader.result;if(file.name.endsWith(".srt"))data="WEBVTT\n\n"+data.replace(/,/g,'.');let blob=new Blob([data],{type:"text/vtt"});let url=URL.createObjectURL(blob);let track=document.createElement("track");track.kind="subtitles";track.src=url;track.default=true;video.appendChild(track)}
+reader.readAsText(file)}
 
 // Default audio + disable subtitles
 video.addEventListener("loadedmetadata",()=>{
 if(video.audioTracks && video.audioTracks.length){for(let i=0;i<video.audioTracks.length;i++)video.audioTracks[i].enabled=(i===0)}
-for(let i=0;i<video.textTracks.length;i++)video.textTracks[i].mode="disabled"}
-)
+for(let i=0;i<video.textTracks.length;i++)video.textTracks[i].mode="disabled"})
 
 // Double-tap 10s seek
 let lastTap=0
-player.addEventListener("touchend",function(e){
-let now=Date.now()
-if(now-lastTap<300){
-let rect=player.getBoundingClientRect()
-let x=e.changedTouches[0].clientX-rect.left
-if(x<rect.width/2){video.currentTime-=10}else{video.currentTime+=10}}
-lastTap=now})
+player.addEventListener("touchend",function(e){let now=Date.now();if(now-lastTap<300){let rect=player.getBoundingClientRect();let x=e.changedTouches[0].clientX-rect.left;if(x<rect.width/2){video.currentTime-=10}else{video.currentTime+=10}}lastTap=now})
 
 // Auto-hide controls
 let hideTimer
-player.addEventListener("mousemove",()=>{
-controls.style.opacity=1
-clearTimeout(hideTimer)
-hideTimer=setTimeout(()=>{controls.style.opacity=0},3000)
-})
+player.addEventListener("mousemove",()=>{controls.style.opacity=1;clearTimeout(hideTimer);hideTimer=setTimeout(()=>{controls.style.opacity=0},3000)})
 </script>
 </body>
 </html>
@@ -234,18 +199,36 @@ hideTimer=setTimeout(()=>{controls.style.opacity=0},3000)
 def home(): return HOME
 
 @app.route("/player")
-def player(): url=request.args.get("url"); return render_template_string(PLAYER,url=urllib.parse.quote(url))
+def player(): 
+    url = request.args.get("url")
+    return render_template_string(PLAYER, url=urllib.parse.quote(url))
 
 @app.route("/stream")
 def stream():
-    url=urllib.parse.unquote(request.args.get("url"))
-    range_header=request.headers.get("Range")
-    headers={"User-Agent":"Mozilla/5.0"}
-    if range_header: headers["Range"]=range_header
-    r=requests.get(url,headers=headers,stream=True)
-    def generate(): 
-        for chunk in r.iter_content(65536): yield chunk
-    return Response(generate(),status=r.status_code,headers=dict(r.headers))
+    url = urllib.parse.unquote(request.args.get("url"))
+    if not url: return "Missing URL", 400
+
+    range_header = request.headers.get("Range")
+    headers = {"User-Agent": "Mozilla/5.0"}
+    if range_header: headers["Range"] = range_header
+
+    r = requests.get(url, headers=headers, stream=True)
+
+    def generate():
+        try:
+            for chunk in r.iter_content(65536):
+                if chunk: yield chunk
+        finally:
+            r.close()
+
+    # Content type for MP4 / MKV
+    content_type = "video/mp4" if url.lower().endswith(".mp4") else "video/x-matroska"
+    response_headers = dict(r.headers)
+    response_headers["Content-Type"] = content_type
+    response_headers["Accept-Ranges"] = "bytes"
+    status = 206 if range_header else 200
+
+    return Response(generate(), status=status, headers=response_headers)
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",port=5000,threaded=True)
+    app.run(host="0.0.0.0", port=5000, threaded=True)
