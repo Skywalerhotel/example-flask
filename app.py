@@ -472,108 +472,156 @@ input[type=range]{
 </div><!-- end .player -->
 
 <script>
-const video       = document.getElementById("video");
-const player      = document.getElementById("player");
-const loader      = document.getElementById("loader");
-const controls    = document.getElementById("controls");
-const progress    = document.getElementById("progress");
-const played      = document.getElementById("played");
-const bufferedEl  = document.getElementById("buffered");
-const playPause   = document.getElementById("playPause");
-const muteBtn     = document.getElementById("mute");
-const volumeEl    = document.getElementById("volume");
-const speedEl     = document.getElementById("speed");
+const video         = document.getElementById("video");
+const player        = document.getElementById("player");
+const loader        = document.getElementById("loader");
+const controls      = document.getElementById("controls");
+const progress      = document.getElementById("progress");
+const played        = document.getElementById("played");
+const bufferedEl    = document.getElementById("buffered");
+const playPause     = document.getElementById("playPause");
+const muteBtn       = document.getElementById("mute");
+const volumeEl      = document.getElementById("volume");
+const speedEl       = document.getElementById("speed");
 const fullscreenBtn = document.getElementById("fullscreen");
-const pipBtn      = document.getElementById("pip");
-const currentEl   = document.getElementById("current");
-const durationEl  = document.getElementById("duration");
-const settingsBtn = document.getElementById("settingsBtn");
+const pipBtn        = document.getElementById("pip");
+const currentEl     = document.getElementById("current");
+const durationEl    = document.getElementById("duration");
+const settingsBtn   = document.getElementById("settingsBtn");
 const settingsPanel = document.getElementById("settingsPanel");
-const srtUpload   = document.getElementById("srtUpload");
-const subtitleList = document.getElementById("subtitleList");
-const audioList   = document.getElementById("audioList");
-const noAudioMsg  = document.getElementById("noAudioMsg");
+const srtUpload     = document.getElementById("srtUpload");
+const subtitleList  = document.getElementById("subtitleList");
+const audioList     = document.getElementById("audioList");
 
 // ===== PLAY / PAUSE =====
-playPause.onclick = () => {
-    if (video.paused) { video.play(); playPause.textContent = "❚❚"; }
-    else { video.pause(); playPause.textContent = "▶"; }
-};
+playPause.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (video.paused) { video.play(); }
+    else { video.pause(); }
+});
+
+// Sync button icon with actual video state
+video.addEventListener("play",  () => { playPause.textContent = "❚❚"; });
+video.addEventListener("pause", () => { playPause.textContent = "▶"; });
 
 // ===== LOADER =====
-video.onwaiting = () => loader.style.display = "block";
-video.onplaying = () => loader.style.display = "none";
+video.addEventListener("waiting", () => loader.style.display = "block");
+video.addEventListener("playing", () => loader.style.display = "none");
+video.addEventListener("canplay", () => loader.style.display = "none");
 
-// ===== PROGRESS =====
-video.ontimeupdate = () => {
-    played.style.width = (video.currentTime / video.duration * 100) + "%";
+// ===== PROGRESS / TIME =====
+video.addEventListener("timeupdate", () => {
+    if (!isNaN(video.duration)) {
+        played.style.width = (video.currentTime / video.duration * 100) + "%";
+    }
     currentEl.textContent = format(video.currentTime);
-};
-video.onloadedmetadata = () => {
+});
+
+video.addEventListener("loadedmetadata", () => {
     durationEl.textContent = format(video.duration);
     detectTracks();
-};
+});
 
 function format(t) {
+    if (isNaN(t)) return "0:00";
     const m = Math.floor(t / 60);
     const s = Math.floor(t % 60).toString().padStart(2, "0");
     return m + ":" + s;
 }
 
-video.onprogress = () => {
+video.addEventListener("progress", () => {
     if (video.buffered.length > 0) {
         const end = video.buffered.end(video.buffered.length - 1);
-        bufferedEl.style.width = (end / video.duration * 100) + "%";
+        if (!isNaN(video.duration)) {
+            bufferedEl.style.width = (end / video.duration * 100) + "%";
+        }
     }
-};
+});
 
-progress.onclick = (e) => {
+// ===== SEEK BAR =====
+progress.addEventListener("click", (e) => {
+    e.stopPropagation();
     const rect = progress.getBoundingClientRect();
     video.currentTime = ((e.clientX - rect.left) / rect.width) * video.duration;
-};
+});
 
 // ===== VOLUME =====
-volumeEl.oninput = () => video.volume = volumeEl.value;
-muteBtn.onclick = () => {
+volumeEl.addEventListener("input", (e) => {
+    e.stopPropagation();
+    video.volume = volumeEl.value;
+    video.muted = (volumeEl.value == 0);
+    muteBtn.textContent = (video.muted || video.volume === 0) ? "🔇" : "🔊";
+});
+
+muteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
     video.muted = !video.muted;
     muteBtn.textContent = video.muted ? "🔇" : "🔊";
-};
+    if (!video.muted) volumeEl.value = video.volume || 1;
+});
 
 // ===== SPEED =====
-speedEl.onchange = () => video.playbackRate = speedEl.value;
+speedEl.addEventListener("change", (e) => {
+    e.stopPropagation();
+    video.playbackRate = speedEl.value;
+});
 
 // ===== FULLSCREEN =====
-fullscreenBtn.onclick = () => {
+fullscreenBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
     if (!document.fullscreenElement) player.requestFullscreen();
     else document.exitFullscreen();
-};
+});
 
 // ===== PiP =====
-pipBtn.onclick = async () => {
-    if (document.pictureInPictureElement) document.exitPictureInPicture();
-    else await video.requestPictureInPicture();
-};
+pipBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try {
+        if (document.pictureInPictureElement) document.exitPictureInPicture();
+        else await video.requestPictureInPicture();
+    } catch(err) { console.warn("PiP error:", err); }
+});
 
 // ===== KEYBOARD =====
-document.onkeydown = (e) => {
-    if (e.code === "Space") { e.preventDefault(); playPause.click(); }
-    if (e.code === "ArrowRight") video.currentTime += 10;
-    if (e.code === "ArrowLeft")  video.currentTime -= 10;
-};
+document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.code === "Space")       { e.preventDefault(); playPause.click(); }
+    if (e.code === "ArrowRight")  { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 10); }
+    if (e.code === "ArrowLeft")   { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
+    if (e.code === "KeyM")        { muteBtn.click(); }
+    if (e.code === "KeyF")        { fullscreenBtn.click(); }
+});
 
 // ===== AUTO HIDE CONTROLS =====
 let hideTimer;
+let mouseIdle = false;
+
 function showControls() {
     controls.classList.remove("hide");
     clearTimeout(hideTimer);
+    // Only hide if settings panel is closed
     hideTimer = setTimeout(() => {
-        if (!settingsPanel.classList.contains("open")) {
+        if (!settingsPanel.classList.contains("open") && !video.paused) {
             controls.classList.add("hide");
         }
     }, 3000);
 }
-player.onmousemove = showControls;
-video.onplay = showControls;
+
+function cancelHide() {
+    clearTimeout(hideTimer);
+    controls.classList.remove("hide");
+}
+
+player.addEventListener("mousemove", showControls);
+player.addEventListener("mouseleave", () => {
+    if (!settingsPanel.classList.contains("open") && !video.paused) {
+        hideTimer = setTimeout(() => controls.classList.add("hide"), 1000);
+    }
+});
+
+// Keep controls visible when paused
+video.addEventListener("pause", cancelHide);
+video.addEventListener("play",  showControls);
 
 // ===== FORWARD BUFFER =====
 setInterval(() => {
@@ -585,20 +633,19 @@ setInterval(() => {
     }
 }, 4000);
 
-// ===== DOUBLE TAP SEEK =====
+// ===== DOUBLE TAP / CLICK ON VIDEO AREA =====
 const seekLeft  = document.getElementById("seekLeft");
 const seekRight = document.getElementById("seekRight");
 let lastTap = 0;
 
-player.addEventListener("click", function(e) {
-    // Don't trigger seek when clicking controls or settings
-    if (e.target.closest(".controls") || e.target.closest(".settings-panel")) return;
-
+// Only attach to the video element itself, not the whole player
+video.addEventListener("click", function(e) {
     const now = Date.now();
     const tapGap = now - lastTap;
 
     if (tapGap < 300 && tapGap > 0) {
-        const rect = player.getBoundingClientRect();
+        // Double tap — seek
+        const rect = video.getBoundingClientRect();
         const x = e.clientX - rect.left;
         if (x < rect.width / 2) {
             video.currentTime = Math.max(0, video.currentTime - 10);
@@ -607,7 +654,10 @@ player.addEventListener("click", function(e) {
             video.currentTime = Math.min(video.duration, video.currentTime + 10);
             animateSeek(seekRight);
         }
-        video.play();
+    } else {
+        // Single tap — toggle play/pause
+        if (video.paused) video.play();
+        else video.pause();
     }
     lastTap = now;
 });
@@ -621,24 +671,28 @@ function animateSeek(el) {
 // ===== SETTINGS PANEL =====
 // ======================================
 
-settingsBtn.onclick = (e) => {
+settingsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const open = settingsPanel.classList.toggle("open");
-    settingsBtn.classList.toggle("open", open);
-    if (open) {
-        showControls(); // keep controls visible while settings open
-    }
-};
+    const isOpen = settingsPanel.classList.toggle("open");
+    settingsBtn.classList.toggle("open", isOpen);
+    if (isOpen) cancelHide();  // keep controls visible while settings open
+    else showControls();
+});
 
-// Close settings when clicking outside
+// Close settings when clicking outside the panel
 document.addEventListener("click", (e) => {
-    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+    if (settingsPanel.classList.contains("open") &&
+        !settingsPanel.contains(e.target) &&
+        e.target !== settingsBtn) {
         settingsPanel.classList.remove("open");
         settingsBtn.classList.remove("open");
+        showControls();
     }
 });
 
-settingsPanel.addEventListener("click", e => e.stopPropagation());
+// Prevent clicks inside settings panel from bubbling to player/video
+settingsPanel.addEventListener("click", (e) => e.stopPropagation());
+controls.addEventListener("click", (e) => e.stopPropagation());
 
 // ======================================
 // ===== SUBTITLE TRACK DETECTION =====
