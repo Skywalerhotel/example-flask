@@ -1,81 +1,91 @@
-from flask import Flask, request, Response, render_template_string, stream_with_context, url_for
+from flask import Flask, request, Response, render_template_string
 import requests, urllib.parse
 
 app = Flask(__name__)
 
-# ================= HOME PAGE =================
+# ================= HOME =================
 
 HOME_HTML = """
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stream Proxy</title>
+
 <style>
 body{
-    margin:0;
-    height:100vh;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    background:linear-gradient(135deg,#0f172a,#1e293b);
-    font-family:Arial;
+margin:0;
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background:#0f172a;
+font-family:Arial;
 }
+
 .card{
-    background:#111827;
-    padding:30px;
-    border-radius:16px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.4);
-    width:90%;
-    max-width:500px;
+background:#111827;
+padding:30px;
+border-radius:15px;
+width:90%;
+max-width:500px;
 }
-h2{color:white;margin-bottom:20px;text-align:center}
+
 input{
-    width:100%;
-    padding:12px;
-    border-radius:10px;
-    border:none;
-    margin-bottom:15px;
-    background:#1f2937;
-    color:white;
+width:100%;
+padding:12px;
+margin-bottom:15px;
+border:none;
+border-radius:8px;
+background:#1f2937;
+color:white;
 }
+
 button{
-    width:100%;
-    padding:12px;
-    border:none;
-    border-radius:10px;
-    background:#2563eb;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
+width:100%;
+padding:12px;
+border:none;
+border-radius:8px;
+background:#2563eb;
+color:white;
+font-weight:bold;
 }
-button:hover{background:#1d4ed8}
+
+h2{color:white;text-align:center}
 </style>
 </head>
+
 <body>
+
 <div class="card">
-<h2>Paste Video URL</h2>
-<form method="get" action="{{ url_for('show_player') }}">
-<input type="text" name="url" placeholder="https://example.com/video.mp4" required>
-<button type="submit">Play Video</button>
+
+<h2>Pasan Ultra Player</h2>
+
+<form action="/player">
+
+<input name="url" placeholder="Paste video URL" required>
+
+<button>Play</button>
+
 </form>
+
 </div>
+
 </body>
 </html>
 """
 
-# ================= PLAYER PAGE =================
+# ================= PLAYER =================
 
 VIDEO_PLAYER_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pasan Video Player </title>
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Pasan Ultra Player</title>
 
 <style>
 
@@ -91,21 +101,17 @@ font-family:Arial;
 
 .player{
 width:95%;
-max-width:1100px;
+max-width:1000px;
 background:black;
-border-radius:18px;
+border-radius:15px;
 overflow:hidden;
 position:relative;
 }
 
 video{
 width:100%;
-height:auto;
-display:block;
 background:black;
 }
-
-/* loader */
 
 .loader{
 position:absolute;
@@ -125,15 +131,13 @@ display:none;
 100%{transform:translate(-50%,-50%) rotate(360deg)}
 }
 
-/* controls */
-
 .controls{
 position:absolute;
 bottom:0;
 width:100%;
 background:linear-gradient(to top,rgba(0,0,0,0.9),transparent);
 padding:15px;
-box-sizing:border-box;
+transition:0.3s;
 }
 
 .progress{
@@ -142,7 +146,7 @@ background:#374151;
 border-radius:5px;
 cursor:pointer;
 position:relative;
-margin-bottom:12px;
+margin-bottom:10px;
 }
 
 .buffered{
@@ -155,8 +159,9 @@ width:0%;
 .played{
 position:absolute;
 height:100%;
-background:#ef4444;
+background:linear-gradient(90deg,#ef4444,#f97316);
 width:0%;
+transition:0.1s linear;
 }
 
 .row{
@@ -171,6 +176,7 @@ border:none;
 color:white;
 font-size:16px;
 cursor:pointer;
+margin-right:8px;
 }
 
 input[type=range]{
@@ -178,25 +184,9 @@ width:80px;
 }
 
 .time{
-font-size:14px;
 color:white;
+font-size:14px;
 }
-
-/* title */
-
-.title{
-font-family: 'Poppins', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    text-align: center;
-    position: relative;
-}
-
-/* subtitle styling */
 
 video::cue{
 font-size:20px;
@@ -206,22 +196,9 @@ padding:4px 8px;
 border-radius:4px;
 }
 
-/* settings panel */
-
-.settings{
-position:absolute;
-right:10px;
-bottom:80px;
-background:#111827;
-color:white;
-padding:12px;
-border-radius:10px;
-display:none;
-}
-
-.settings button{
-display:block;
-margin:5px 0;
+button:hover{
+transform:scale(1.15);
+transition:0.2s;
 }
 
 </style>
@@ -232,27 +209,27 @@ margin:5px 0;
 <div class="player" id="player">
 
 <video id="video"
-src="{{ url_for('stream_video', url=video_url_encoded) }}"
+src="{{ url_for('stream_video',url=video_url_encoded) }}"
 autoplay preload="auto"></video>
 
 <input type="file" id="subtitleFile" accept=".srt" style="display:none">
 
 <div class="loader" id="loader"></div>
 
-<div class="controls">
-
-<div class="title">Pasan Video Player</div>
+<div class="controls" id="controls">
 
 <div class="progress" id="progress">
+
 <div class="buffered" id="buffered"></div>
 <div class="played" id="played"></div>
+
 </div>
 
 <div class="row">
 
-<div class="left">
+<div>
 
-<button id="playPause">▶</button>
+<button id="playPause">⏵</button>
 
 <button id="mute">🔊</button>
 
@@ -263,11 +240,9 @@ autoplay preload="auto"></video>
 
 </div>
 
-<div class="right">
+<div>
 
 <button id="ccBtn">CC</button>
-
-<button id="audioBtn">🎵</button>
 
 <select id="speed">
 <option value="0.5">0.5x</option>
@@ -280,19 +255,9 @@ autoplay preload="auto"></video>
 
 <button id="fullscreen">⛶</button>
 
-<button id="settingsBtn">⚙</button>
-
 </div>
 
 </div>
-
-</div>
-
-<div class="settings" id="settings">
-
-<button id="loadSubtitle">Load Subtitle</button>
-
-<button id="toggleSubtitle">Toggle Subtitle</button>
 
 </div>
 
@@ -301,25 +266,29 @@ autoplay preload="auto"></video>
 <script>
 
 const video=document.getElementById("video")
+const player=document.getElementById("player")
+
 const playPause=document.getElementById("playPause")
 const loader=document.getElementById("loader")
+
 const progress=document.getElementById("progress")
 const played=document.getElementById("played")
 const buffered=document.getElementById("buffered")
+
 const volume=document.getElementById("volume")
 const mute=document.getElementById("mute")
+
 const speed=document.getElementById("speed")
 const fullscreen=document.getElementById("fullscreen")
 const pip=document.getElementById("pip")
+
 const current=document.getElementById("current")
 const duration=document.getElementById("duration")
 
-const settingsBtn=document.getElementById("settingsBtn")
-const settings=document.getElementById("settings")
+const controls=document.getElementById("controls")
 
+const ccBtn=document.getElementById("ccBtn")
 const subtitleFile=document.getElementById("subtitleFile")
-const loadSubtitle=document.getElementById("loadSubtitle")
-const toggleSubtitle=document.getElementById("toggleSubtitle")
 
 /* play pause */
 
@@ -328,10 +297,9 @@ playPause.onclick=()=>{
 if(video.paused){
 video.play()
 playPause.textContent="❚❚"
-}
-else{
+}else{
 video.pause()
-playPause.textContent="▶"
+playPause.textContent="⏵"
 }
 
 }
@@ -341,11 +309,13 @@ playPause.textContent="▶"
 video.onwaiting=()=>loader.style.display="block"
 video.onplaying=()=>loader.style.display="none"
 
-/* time update */
+/* time */
 
 video.ontimeupdate=()=>{
 
+if(video.duration){
 played.style.width=(video.currentTime/video.duration*100)+"%"
+}
 
 current.textContent=format(video.currentTime)
 
@@ -377,15 +347,30 @@ buffered.style.width=(end/video.duration*100)+"%"
 
 }
 
-/* seek */
+/* drag seek */
 
-progress.onclick=(e)=>{
+let seeking=false
+
+progress.addEventListener("mousedown",startSeek)
+document.addEventListener("mousemove",seekMove)
+document.addEventListener("mouseup",()=>seeking=false)
+
+function startSeek(e){
+seeking=true
+seekMove(e)
+}
+
+function seekMove(e){
+
+if(!seeking||!video.duration) return
 
 const rect=progress.getBoundingClientRect()
 
-const x=e.clientX-rect.left
+let percent=(e.clientX-rect.left)/rect.width
 
-video.currentTime=(x/rect.width)*video.duration
+percent=Math.max(0,Math.min(1,percent))
+
+video.currentTime=video.duration*percent
 
 }
 
@@ -427,18 +412,30 @@ await video.requestPictureInPicture()
 
 }
 
-/* settings */
+/* auto hide */
 
-settingsBtn.onclick=()=>{
+let hideTimer
 
-settings.style.display=
-settings.style.display=="block"?"none":"block"
+function showControls(){
+
+controls.style.opacity="1"
+
+clearTimeout(hideTimer)
+
+hideTimer=setTimeout(()=>{
+
+controls.style.opacity="0"
+
+},3000)
 
 }
 
-/* subtitle load */
+player.addEventListener("mousemove",showControls)
+player.addEventListener("touchstart",showControls)
 
-loadSubtitle.onclick=()=>subtitleFile.click()
+/* subtitle */
+
+ccBtn.onclick=()=>subtitleFile.click()
 
 subtitleFile.onchange=function(){
 
@@ -450,10 +447,10 @@ reader.onload=function(){
 
 const srt=reader.result
 
-const vtt="WEBVTT\n\n"+srt
-.replace(/\r+/g,"")
-.replace(/(\d+)\n(\d{2}:\d{2}:\d{2}),/g,"$1\n$2.")
-.replace(/ --> (\d{2}:\d{2}:\d{2}),/g," --> $1.")
+const vtt="WEBVTT\\n\\n"+srt
+.replace(/\\r+/g,"")
+.replace(/(\\d+)\\n(\\d{2}:\\d{2}:\\d{2}),/g,"$1\\n$2.")
+.replace(/ --> (\\d{2}:\\d{2}:\\d{2}),/g," --> $1.")
 
 const blob=new Blob([vtt],{type:"text/vtt"})
 
@@ -473,21 +470,26 @@ reader.readAsText(file)
 
 }
 
-/* toggle subtitle */
+/* double tap seek */
 
-toggleSubtitle.onclick=()=>{
+let lastTap=0
 
-const tracks=video.textTracks
+player.addEventListener("click",function(e){
 
-for(let i=0;i<tracks.length;i++){
+let now=Date.now()
 
-tracks[i].mode=
-tracks[i].mode==="showing"?"hidden":"showing"
+if(now-lastTap<300){
+
+if(e.clientX<window.innerWidth/2)
+video.currentTime-=10
+else
+video.currentTime+=10
 
 }
 
-}
+lastTap=now
 
+})
 
 </script>
 
@@ -495,42 +497,40 @@ tracks[i].mode==="showing"?"hidden":"showing"
 </html>
 """
 
-# ================= FLASK ROUTES =================
+# ================= ROUTES =================
 
 @app.route('/')
 def home():
     return render_template_string(HOME_HTML)
 
 @app.route('/player')
-def show_player():
-    url = request.args.get('url')
-    if not url:
-        return "No URL provided", 400
-    encoded = urllib.parse.quote(url)
-    return render_template_string(VIDEO_PLAYER_HTML, video_url_encoded=encoded)
+def player():
+    url=request.args.get("url")
+    encoded=urllib.parse.quote(url)
+    return render_template_string(VIDEO_PLAYER_HTML,video_url_encoded=encoded)
 
 @app.route('/stream')
 def stream_video():
-    encoded = request.args.get('url')
-    if not encoded:
-        return "Missing URL", 400
 
-    video_url = urllib.parse.unquote(encoded)
-    range_header = request.headers.get('Range')
+    encoded=request.args.get("url")
 
-    headers = {'User-Agent':'Mozilla/5.0'}
+    video_url=urllib.parse.unquote(encoded)
+
+    range_header=request.headers.get('Range')
+
+    headers={'User-Agent':'Mozilla/5.0'}
+
     if range_header:
-        headers['Range'] = range_header
+        headers['Range']=range_header
 
-    upstream = requests.get(video_url, headers=headers, stream=True)
+    r=requests.get(video_url,headers=headers,stream=True)
 
     def generate():
-        for chunk in upstream.iter_content(chunk_size=32768):
+        for chunk in r.iter_content(32768):
             if chunk:
                 yield chunk
-        upstream.close()
 
-    return Response(generate(), status=upstream.status_code, headers=dict(upstream.headers))
+    return Response(generate(),status=r.status_code,headers=dict(r.headers))
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+    app.run(host="0.0.0.0",port=5000,threaded=True)
