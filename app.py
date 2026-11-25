@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, render_template_string, stream_with_context, url_for
+from flask import Flask, request, Response, render_template_string, url_for
 import requests, urllib.parse
 
 app = Flask(__name__)
@@ -20,7 +20,7 @@ body{
     justify-content:center;
     align-items:center;
     background:linear-gradient(135deg,#0f172a,#1e293b);
-    font-family:Arial;
+    font-family:Arial, sans-serif;
 }
 .card{
     background:#111827;
@@ -39,6 +39,7 @@ input{
     margin-bottom:15px;
     background:#1f2937;
     color:white;
+    box-sizing:border-box;
 }
 button{
     width:100%;
@@ -96,6 +97,8 @@ VIDEO_PLAYER_HTML = """
     overflow: hidden;
     position: relative;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
   }
 
   video {
@@ -104,6 +107,8 @@ VIDEO_PLAYER_HTML = """
     display: block;
     object-fit: contain;
     background: #000;
+    pointer-events: none;
+    -webkit-touch-callout: none;
   }
 
   /* Top Title Gradient */
@@ -189,11 +194,12 @@ VIDEO_PLAYER_HTML = """
   /* YouTube Seek Bar */
   .progress-wrap {
     position: relative;
-    height: 16px;
+    height: 20px;
     display: flex;
     align-items: center;
     cursor: pointer;
     margin-bottom: 6px;
+    touch-action: none;
   }
   .progress {
     position: relative;
@@ -235,7 +241,7 @@ VIDEO_PLAYER_HTML = """
   }
   .hover-time {
     position: absolute;
-    bottom: 20px;
+    bottom: 22px;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.85);
     color: #fff;
@@ -368,7 +374,7 @@ VIDEO_PLAYER_HTML = """
 <div class="player" id="player">
   <video id="video"
     src="{{ url_for('stream_video', url=video_url_encoded) }}"
-    autoplay preload="auto" crossorigin="anonymous"></video>
+    autoplay playsinline preload="auto" crossorigin="anonymous"></video>
 
   <div class="top-bar" id="topBar">pasan video player</div>
   <div class="loader" id="loader"></div>
@@ -482,6 +488,9 @@ const audioList = document.getElementById("audioList");
 let hideTimer;
 let isDragging = false;
 
+/* Block browser long-press / right-click menu */
+player.addEventListener("contextmenu", (e) => e.preventDefault());
+
 const PLAY_SVG = '<path d="M8 5v14l11-7z"/>';
 const PAUSE_SVG = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
 
@@ -518,8 +527,8 @@ video.ontimeupdate = () => {
     const pct = (video.currentTime / video.duration) * 100;
     played.style.width = pct + "%";
     scrubber.style.left = pct + "%";
+    current.textContent = format(video.currentTime);
   }
-  current.textContent = format(video.currentTime);
 };
 
 video.onloadedmetadata = () => {
@@ -535,43 +544,62 @@ video.onprogress = () => {
   }
 };
 
-/* YouTube-Style Seek Bar (Click + Drag + Hover Preview) */
-function seekFromEvent(e) {
+/* YouTube-Style Seek Bar (Smooth Tap + Drag Seeking) */
+let seekTargetTime = 0;
+
+function getSeekRatio(e) {
   const rect = progressWrap.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
-  if (video.duration) {
-    video.currentTime = ratio * video.duration;
-    played.style.width = (ratio * 100) + "%";
-    scrubber.style.left = (ratio * 100) + "%";
-  }
+  return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+}
+
+function updateSeekUI(e) {
+  if (!video.duration) return;
+  const ratio = getSeekRatio(e);
+  seekTargetTime = ratio * video.duration;
+  played.style.width = (ratio * 100) + "%";
+  scrubber.style.left = (ratio * 100) + "%";
+  current.textContent = format(seekTargetTime);
+  hoverTime.style.display = "block";
+  hoverTime.style.left = (ratio * 100) + "%";
+  hoverTime.textContent = format(seekTargetTime);
 }
 
 progressWrap.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
   isDragging = true;
   progressWrap.classList.add("dragging");
   progressWrap.setPointerCapture(e.pointerId);
-  seekFromEvent(e);
+  updateSeekUI(e);
 });
 
 progressWrap.addEventListener("pointermove", (e) => {
-  const rect = progressWrap.getBoundingClientRect();
-  const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-  if (video.duration) {
+  if (!video.duration) return;
+  if (isDragging) {
+    updateSeekUI(e);
+  } else {
+    const ratio = getSeekRatio(e);
     hoverTime.style.display = "block";
     hoverTime.style.left = (ratio * 100) + "%";
     hoverTime.textContent = format(ratio * video.duration);
   }
-  if (isDragging) seekFromEvent(e);
 });
 
-progressWrap.addEventListener("pointerup", () => {
+function finishSeek(e) {
+  if (!isDragging) return;
+  e.stopPropagation();
+  if (video.duration) {
+    video.currentTime = seekTargetTime;
+  }
   isDragging = false;
   progressWrap.classList.remove("dragging");
-});
-
-progressWrap.addEventListener("pointerleave", () => {
   hoverTime.style.display = "none";
+}
+
+progressWrap.addEventListener("pointerup", finishSeek);
+progressWrap.addEventListener("pointercancel", finishSeek);
+progressWrap.addEventListener("click", (e) => e.stopPropagation());
+progressWrap.addEventListener("pointerleave", () => {
+  if (!isDragging) hoverTime.style.display = "none";
 });
 
 /* Volume */
@@ -843,19 +871,31 @@ def stream_video():
     video_url = urllib.parse.unquote(encoded)
     range_header = request.headers.get('Range')
 
-    headers = {'User-Agent':'Mozilla/5.0'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     if range_header:
         headers['Range'] = range_header
 
     upstream = requests.get(video_url, headers=headers, stream=True)
 
+    # Filter out hop-by-hop headers to prevent chunking/seeking glitches
+    excluded = {'content-encoding', 'content-length', 'transfer-encoding', 'connection'}
+    resp_headers = {
+        k: v for k, v in upstream.headers.items()
+        if k.lower() not in excluded
+    }
+    if 'Content-Length' in upstream.headers:
+        resp_headers['Content-Length'] = upstream.headers['Content-Length']
+    resp_headers.setdefault('Accept-Ranges', 'bytes')
+
     def generate():
-        for chunk in upstream.iter_content(chunk_size=32768):
-            if chunk:
-                yield chunk
-        upstream.close()
+        try:
+            for chunk in upstream.iter_content(chunk_size=32768):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
 
-    return Response(generate(), status=upstream.status_code, headers=dict(upstream.headers))
+    return Response(generate(), status=upstream.status_code, headers=resp_headers)
 
-if __name__=="__main__":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)
